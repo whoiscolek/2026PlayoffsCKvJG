@@ -27,16 +27,48 @@ const els = {
   roundSaveBtn: document.querySelector("#round-save-btn")
 };
 
-init();
+init().catch(error => {
+  console.error("App failed to initialize:", error);
+  if (els.authStatus) {
+    els.authStatus.textContent = "App error — check browser console.";
+  }
+});
 
 async function init() {
   wireTabs();
   wireAdmin();
+  wireAuth();
+
   els.refreshBtn.addEventListener("click", refreshAll);
-  subscribeToPicks();
-  subscribeToLedger();
-  subscribeToRoundOverrides();
-  await refreshAll();
+
+  try {
+    subscribeToPicks();
+    subscribeToLedger();
+    subscribeToRoundOverrides();
+  } catch (error) {
+    console.error("Firestore listener setup failed:", error);
+  }
+
+  try {
+    await ensureAccessDoc();
+  } catch (error) {
+    console.error("Access/password setup failed:", error);
+    if (els.authStatus) {
+      els.authStatus.textContent = "Login setup failed — check Firebase/Firestore.";
+    }
+  }
+
+  renderAuth();
+
+  try {
+    await refreshAll();
+  } catch (error) {
+    console.error("Game refresh failed:", error);
+    if (els.lastUpdated) {
+      els.lastUpdated.textContent = "Could not load games. Check /api/today-games.";
+    }
+  }
+
   setInterval(refreshAll, 90_000);
 }
 
