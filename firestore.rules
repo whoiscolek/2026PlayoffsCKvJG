@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Trust-based friend app rules.
+    // Open read/write for this project. Tighten this later if the URL gets shared.
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

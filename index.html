@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jamie vs Cole NBA Playoff Bets</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">NBA Playoffs Betting Dashboard</p>
+          <h1>Jamie vs Cole</h1>
+          <p class="hero-copy">Winner-only playoff bets. Opposite picks activate the bet. Same picks cancel it. Picks lock at tipoff.</p>
+        </div>
+        <div class="scoreboard-card">
+          <span class="mini-label">Current Ledger</span>
+          <div class="ledger-line"><span>Cole</span><strong id="cole-balance">-$11</strong></div>
+          <div class="ledger-line"><span>Jamie</span><strong id="jamie-balance">+$11</strong></div>
+        </div>
+      </header>
+
+      <section class="auth-bar" aria-label="Password login controls">
+        <div>
+          <span class="mini-label">Access</span>
+          <strong id="auth-status">Checking login...</strong>
+          <p>Default passwords are <code>cole</code>, <code>jamie</code>, and <code>admin</code>. Change them after first login.</p>
+        </div>
+        <div class="auth-actions">
+          <button id="login-cole-btn" class="ghost-btn">Login Cole</button>
+          <button id="login-jamie-btn" class="ghost-btn">Login Jamie</button>
+          <button id="login-admin-btn" class="ghost-btn">Login Admin</button>
+          <button id="logout-btn" class="ghost-btn">Logout</button>
+        </div>
+      </section>
+
+      <nav class="tabs" aria-label="App sections">
+        <button class="tab active" data-tab="games">Today</button>
+        <button class="tab" data-tab="ledger">Ledger</button>
+        <button class="tab" data-tab="settings">Admin</button>
+      </nav>
+
+      <main>
+        <section id="games-tab" class="tab-panel active">
+          <div class="section-heading">
+            <div>
+              <h2>Today's playoff games</h2>
+              <p id="last-updated">Loading games...</p>
+            </div>
+            <button id="refresh-btn" class="ghost-btn">Refresh</button>
+          </div>
+          <div id="games-list" class="games-list"></div>
+        </section>
+
+        <section id="ledger-tab" class="tab-panel">
+          <div class="section-heading">
+            <div>
+              <h2>Bet ledger</h2>
+              <p>Starting state: Jamie +$11, Cole -$11.</p>
+            </div>
+          </div>
+          <div id="ledger-list" class="ledger-list"></div>
+        </section>
+
+        <section id="settings-tab" class="tab-panel">
+          <div class="section-heading">
+            <div>
+              <h2>Admin controls</h2>
+              <p>Trust-based tools for correcting a game if an API gets weird.</p>
+            </div>
+          </div>
+
+          <div class="admin-card">
+            <h3>Password settings</h3>
+            <p>Login as Cole/Jamie/Admin first, then change that role’s password here.</p>
+            <label>Role</label>
+            <select id="password-role">
+              <option value="cole">Cole</option>
+              <option value="jamie">Jamie</option>
+              <option value="admin">Admin</option>
+            </select>
+            <label>Current password</label>
+            <input id="current-password" type="password" autocomplete="current-password" placeholder="Current password" />
+            <label>New password</label>
+            <input id="new-password" type="password" autocomplete="new-password" placeholder="New password" />
+            <button id="change-password-btn" class="primary-btn">Change password</button>
+          </div>
+
+          <div class="admin-card admin-only-control">
+            <h3>Manual game settlement</h3>
+            <p>Use only if the automatic NBA final-score grading fails.</p>
+            <label>Game ID</label>
+            <input id="manual-game-id" placeholder="Example: 0042500201" />
+            <label>Winner Team ID</label>
+            <input id="manual-winner-id" placeholder="Paste team id from game card" />
+            <button id="manual-grade-btn" class="primary-btn">Settle manually</button>
+          </div>
+
+          <div class="admin-card admin-only-control">
+            <h3>Round override</h3>
+            <p>The app estimates the round by date. Override a specific game here if needed.</p>
+            <label>Game ID</label>
+            <input id="round-game-id" placeholder="Example: 0042500201" />
+            <label>Round</label>
+            <select id="round-key">
+              <option value="first_round">First Round — $1</option>
+              <option value="conference_semifinals">Conference Semifinals — $2</option>
+              <option value="conference_finals">Conference Finals — $3</option>
+              <option value="finals">NBA Finals — $4</option>
+              <option value="finals_game_7">NBA Finals Game 7 — $10</option>
+            </select>
+            <button id="round-save-btn" class="primary-btn">Save round override</button>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="game-card-template">
+      <article class="game-card">
+        <div class="game-card-top">
+          <div>
+            <span class="pill round-pill"></span>
+            <h3 class="matchup-title"></h3>
+            <p class="game-meta"></p>
+          </div>
+          <div class="value-badge"></div>
+        </div>
+
+        <div class="teams-grid">
+          <button class="team-pick away-pick" data-side="away">
+            <span class="team-code away-code"></span>
+            <span class="team-name away-name"></span>
+            <strong class="team-odds away-odds"></strong>
+          </button>
+          <button class="team-pick home-pick" data-side="home">
+            <span class="team-code home-code"></span>
+            <span class="team-name home-name"></span>
+            <strong class="team-odds home-odds"></strong>
+          </button>
+        </div>
+
+        <div class="pick-board">
+          <div>
+            <span class="mini-label">Cole pick</span>
+            <strong class="cole-pick">No pick</strong>
+          </div>
+          <div>
+            <span class="mini-label">Jamie pick</span>
+            <strong class="jamie-pick">No pick</strong>
+          </div>
+          <div>
+            <span class="mini-label">Bet status</span>
+            <strong class="bet-status">Pending</strong>
+          </div>
+        </div>
+
+        <div class="picker-row">
+          <label>
+            Pick as
+            <select class="picker-person">
+              <option value="cole">Cole</option>
+              <option value="jamie">Jamie</option>
+            </select>
+          </label>
+          <button class="clear-picks ghost-btn">Clear picks</button>
+        </div>
+
+        <details class="recap-box">
+          <summary>Game recap / decision notes</summary>
+          <p class="recap-summary"></p>
+          <p class="odds-note"></p>
+          <a class="injury-link" target="_blank" rel="noreferrer">Official NBA injury report</a>
+        </details>
+
+        <p class="game-footnote"></p>
+      </article>
+    </template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
