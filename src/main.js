@@ -490,8 +490,11 @@ function renderGameCard(game) {
   clear.textContent = state.auth.admin ? "Clear picks" : "Clear picks (admin)";
   clear.addEventListener("click", () => clearPicks(game.gameId));
 
-  node.querySelector(".recap-summary").textContent = game.recapSeed.summary;
-  node.querySelector(".odds-note").textContent = `${game.recapSeed.oddsNote} Book: ${game.odds.bookmaker}.`;
+  const matchupIntel = getMatchupIntel(game, pickDoc, ledgerEvent);
+
+  node.querySelector(".intel-title").textContent = matchupIntel.title;
+  node.querySelector(".recap-summary").textContent = matchupIntel.summary;
+  node.querySelector(".odds-note").textContent = matchupIntel.note;
 
   const injuryLink = node.querySelector(".injury-link");
   injuryLink.href = game.injuryReportUrl;
@@ -530,6 +533,99 @@ function getScoreText(game) {
   }
 
   return `${game.awayTeam.triCode} ${awayScore}, ${game.homeTeam.triCode} ${homeScore}`;
+}
+
+function getMatchupIntel(game, pickDoc, ledgerEvent) {
+  const awayScore = Number(game.awayTeam?.score || 0);
+  const homeScore = Number(game.homeTeam?.score || 0);
+  const awayOdds = game.odds?.awayOdds || "N/A";
+  const homeOdds = game.odds?.homeOdds || "N/A";
+  const book = game.odds?.bookmaker || "odds source";
+  const value = game.round?.value || 0;
+
+  const colePick = getPickTeamLabel(game, pickDoc?.picks?.cole);
+  const jamiePick = getPickTeamLabel(game, pickDoc?.picks?.jamie);
+
+  const favoriteText = getFavoriteText(game);
+  const pickText = `Current picks: Cole — ${colePick}; Jamie — ${jamiePick}.`;
+
+  if (game.status === 1 && !game.isFinal) {
+    return {
+      title: "Lead-up Intel",
+      summary: `${game.awayTeam.fullName} visit ${game.homeTeam.fullName} in the ${game.round.label}. ${game.seriesText}. This is a $${value} game if Cole and Jamie land on opposite sides. ${favoriteText}`,
+      note: `Pregame moneyline via ${book}: ${game.awayTeam.triCode} ${awayOdds}, ${game.homeTeam.triCode} ${homeOdds}. ${pickText} Check the official NBA injury report before tipoff for late availability changes.`
+    };
+  }
+
+  if (game.status === 2) {
+    const periodText = game.period ? `Q${game.period}` : "Live";
+    const clockText = game.clock ? ` with ${game.clock} remaining` : "";
+    const leader = getCurrentLeaderText(game);
+
+    return {
+      title: "Live Intel",
+      summary: `${game.awayTeam.triCode} ${awayScore}, ${game.homeTeam.triCode} ${homeScore} — ${periodText}${clockText}. ${leader} Picks are locked because the game has tipped off.`,
+      note: `Pregame moneyline was ${game.awayTeam.triCode} ${awayOdds}, ${game.homeTeam.triCode} ${homeOdds} via ${book}. ${pickText} This game is worth $${value}.`
+    };
+  }
+
+  if (game.status === 3 || game.isFinal) {
+    const winner = String(game.winnerTeamId) === String(game.awayTeam.id)
+      ? game.awayTeam.fullName
+      : String(game.winnerTeamId) === String(game.homeTeam.id)
+        ? game.homeTeam.fullName
+        : "Winner pending";
+
+    const resultText = ledgerEvent
+      ? `Bet result: ${ledgerEvent.summary}.`
+      : "Bet result has not been posted to the ledger yet.";
+
+    return {
+      title: "Final Intel",
+      summary: `Final: ${game.awayTeam.triCode} ${awayScore}, ${game.homeTeam.triCode} ${homeScore}. ${winner} won the game. ${resultText}`,
+      note: `This was a $${value} ${game.round.label} game. ${pickText}`
+    };
+  }
+
+  return {
+    title: "Matchup Intel",
+    summary: `${game.awayTeam.fullName} at ${game.homeTeam.fullName}. ${game.seriesText}.`,
+    note: `Moneyline via ${book}: ${game.awayTeam.triCode} ${awayOdds}, ${game.homeTeam.triCode} ${homeOdds}. ${pickText}`
+  };
+}
+
+function getFavoriteText(game) {
+  const awayOdds = Number(game.odds?.awayOdds);
+  const homeOdds = Number(game.odds?.homeOdds);
+
+  if (!Number.isFinite(awayOdds) || !Number.isFinite(homeOdds)) {
+    return "The current favorite is not available from the odds feed.";
+  }
+
+  if (awayOdds < homeOdds) {
+    return `${game.awayTeam.fullName} enter as the betting favorite at ${game.odds.awayOdds}, while ${game.homeTeam.fullName} are listed at ${game.odds.homeOdds}.`;
+  }
+
+  if (homeOdds < awayOdds) {
+    return `${game.homeTeam.fullName} enter as the betting favorite at ${game.odds.homeOdds}, while ${game.awayTeam.fullName} are listed at ${game.odds.awayOdds}.`;
+  }
+
+  return "The moneyline is currently even between both teams.";
+}
+
+function getCurrentLeaderText(game) {
+  const awayScore = Number(game.awayTeam?.score || 0);
+  const homeScore = Number(game.homeTeam?.score || 0);
+
+  if (awayScore > homeScore) {
+    return `${game.awayTeam.fullName} are currently leading.`;
+  }
+
+  if (homeScore > awayScore) {
+    return `${game.homeTeam.fullName} are currently leading.`;
+  }
+
+  return "The game is currently tied.";
 }
 
 function getActivePickerRole() {
