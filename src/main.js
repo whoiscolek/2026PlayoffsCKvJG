@@ -490,6 +490,22 @@ function getScoreText(game) {
   return node;
 }
 
+function getActivePickerRole() {
+  const activePickers = ["cole", "jamie"].filter(role => state.auth[role]);
+
+  if (activePickers.length === 1) {
+    return activePickers[0];
+  }
+
+  if (activePickers.length === 0) {
+    alert("Log in as Cole or Jamie before making a pick.");
+    return null;
+  }
+
+  alert("Both Cole and Jamie are logged in. Log out, then log in as only the person making this pick.");
+  return null;
+}
+
 async function savePick(game, person, teamId) {
   if (isLocked(game)) return alert("Picks are locked at scheduled tipoff.");
   const ok = await requireLogin(person);
