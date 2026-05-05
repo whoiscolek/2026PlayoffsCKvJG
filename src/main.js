@@ -107,62 +107,78 @@ function wireTabs() {
 }
 
 function wireAdmin() {
-  els.manualGradeBtn.addEventListener("click", async () => {
-    const ok = await requireLogin("admin");
-    if (!ok) return;
+  if (els.manualGradeBtn) {
+    els.manualGradeBtn.addEventListener("click", async () => {
+      const ok = await requireLogin("admin");
+      if (!ok) return;
 
-    const gameId = els.manualGameId.value.trim();
-    const winnerTeamId = els.manualWinnerId.value.trim();
-    const game = state.games.find(g => g.gameId === gameId);
+      const gameId = els.manualGameId?.value.trim();
+      const winnerTeamId = els.manualWinnerId?.value.trim();
+      const game = state.games.find(g => g.gameId === gameId);
 
-    if (!game || !winnerTeamId) {
-      return alert("Need a valid game ID and winner team ID.");
-    }
+      if (!game || !winnerTeamId) {
+        return alert("Need a valid game ID and winner team ID.");
+      }
 
-    const manualGame = { ...game, isFinal: true, winnerTeamId };
-    await maybeGradeAndSave(manualGame);
-    alert("Manual settlement attempted. Check ledger.");
-  });
+      const manualGame = { ...game, isFinal: true, winnerTeamId };
+      await maybeGradeAndSave(manualGame);
+      alert("Manual settlement attempted. Check ledger.");
+    });
+  }
 
-  els.roundSaveBtn.addEventListener("click", async () => {
-    const ok = await requireLogin("admin");
-    if (!ok) return;
+  if (els.roundSaveBtn) {
+    els.roundSaveBtn.addEventListener("click", async () => {
+      const ok = await requireLogin("admin");
+      if (!ok) return;
 
-    const gameId = els.roundGameId.value.trim();
-    const key = els.roundKey.value;
-    const round = { key, label: ROUND_VALUES[key].label, value: ROUND_VALUES[key].value };
+      const gameId = els.roundGameId?.value.trim();
+      const key = els.roundKey?.value;
 
-    await setDoc(doc(db, "roundOverrides", gameId), {
-      gameId,
-      round,
-      updatedAt: serverTimestamp()
-    }, { merge: true });
+      if (!gameId || !key) {
+        return alert("Need a valid game ID and round.");
+      }
 
-    alert("Round override saved.");
-  });
+      const round = {
+        key,
+        label: ROUND_VALUES[key].label,
+        value: ROUND_VALUES[key].value
+      };
+
+      await setDoc(doc(db, "roundOverrides", gameId), {
+        gameId,
+        round,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      alert("Round override saved.");
+    });
+  }
 
   if (els.overridePicksBtn) {
     els.overridePicksBtn.addEventListener("click", overridePicks);
   }
 }
 
-  els.roundSaveBtn.addEventListener("click", async () => {
-    const ok = await requireLogin("admin");
-    if (!ok) return;
-    const gameId = els.roundGameId.value.trim();
-    const key = els.roundKey.value;
-    const round = { key, label: ROUND_VALUES[key].label, value: ROUND_VALUES[key].value };
-    await setDoc(doc(db, "roundOverrides", gameId), { gameId, round, updatedAt: serverTimestamp() }, { merge: true });
-    alert("Round override saved.");
-  });
-}
-
 function wireAuth() {
-  els.loginColeBtn.addEventListener("click", () => requireLogin("cole"));
-  els.loginJamieBtn.addEventListener("click", () => requireLogin("jamie"));
-  els.loginAdminBtn.addEventListener("click", () => requireLogin("admin"));
-  els.logoutBtn.addEventListener("click", logoutAll);
-  els.changePasswordBtn.addEventListener("click", changePassword);
+  if (els.loginColeBtn) {
+    els.loginColeBtn.addEventListener("click", () => requireLogin("cole"));
+  }
+
+  if (els.loginJamieBtn) {
+    els.loginJamieBtn.addEventListener("click", () => requireLogin("jamie"));
+  }
+
+  if (els.loginAdminBtn) {
+    els.loginAdminBtn.addEventListener("click", () => requireLogin("admin"));
+  }
+
+  if (els.logoutBtn) {
+    els.logoutBtn.addEventListener("click", logoutAll);
+  }
+
+  if (els.changePasswordBtn) {
+    els.changePasswordBtn.addEventListener("click", changePassword);
+  }
 }
 
 async function ensureAccessDoc() {
