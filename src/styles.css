@@ -260,3 +260,274 @@ a { color: var(--accent); }
   .teams-grid, .pick-board { grid-template-columns: 1fr; }
   .tabs { width: 100%; display: grid; grid-template-columns: repeat(3,1fr); }
 }
+
+/* ================================
+   Spacing / layout cleanup overrides
+   ================================ */
+
+.app-shell {
+  width: min(1280px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 44px 0 64px;
+}
+
+/* Header spacing */
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  align-items: center;
+  gap: 48px;
+  margin-bottom: 34px;
+}
+
+.hero h1 {
+  line-height: 0.92;
+  margin: 8px 0 18px;
+  letter-spacing: -0.06em;
+}
+
+.hero-copy {
+  max-width: 720px;
+  line-height: 1.55;
+}
+
+/* Ledger card */
+.scoreboard-card {
+  justify-self: end;
+  width: 100%;
+  max-width: 320px;
+  padding: 24px 26px;
+}
+
+.ledger-line {
+  padding: 14px 0;
+}
+
+/* Access/login area */
+.auth-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  padding: 18px 20px;
+  margin-bottom: 22px;
+}
+
+.auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.auth-bar .ghost-btn {
+  min-height: 44px;
+  padding: 0 18px;
+}
+
+/* Tabs */
+.tabs {
+  margin-bottom: 26px;
+  padding: 6px;
+  width: fit-content;
+}
+
+.tab {
+  min-width: 96px;
+  min-height: 42px;
+}
+
+/* Section heading */
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+
+.section-heading h2 {
+  margin: 0 0 6px;
+}
+
+.section-heading p {
+  margin: 0;
+}
+
+/* Game grid */
+.games-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+  align-items: start;
+}
+
+/* Game cards */
+.game-card {
+  padding: 22px;
+  min-height: auto;
+}
+
+.game-card-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: start;
+  margin-bottom: 20px;
+}
+
+.matchup-title {
+  margin: 12px 0 8px;
+  line-height: 1.18;
+}
+
+.game-meta {
+  line-height: 1.4;
+}
+
+.value-badge {
+  width: 62px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+}
+
+/* Team pick buttons */
+.teams-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.team-pick {
+  min-height: 126px;
+  padding: 18px;
+  align-items: start;
+}
+
+.team-code {
+  margin-bottom: 4px;
+}
+
+.team-name {
+  line-height: 1.25;
+}
+
+.team-odds {
+  margin-top: auto;
+  padding-top: 18px;
+}
+
+/* Pick status board */
+.pick-board {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.25fr;
+  gap: 14px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.pick-board > div {
+  min-width: 0;
+}
+
+/* Picker row */
+.picker-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.picker-row label {
+  display: grid;
+  gap: 7px;
+}
+
+.picker-person {
+  min-width: 96px;
+  min-height: 42px;
+}
+
+.clear-picks {
+  min-height: 42px;
+  padding: 0 18px;
+}
+
+/* Recap / notes */
+.recap-box {
+  padding-top: 14px;
+  margin-top: 6px;
+}
+
+.recap-box summary {
+  cursor: pointer;
+}
+
+.game-footnote {
+  margin-top: 14px;
+  line-height: 1.45;
+  opacity: 0.78;
+}
+
+/* Admin cards */
+.admin-card {
+  padding: 22px;
+  margin-bottom: 18px;
+}
+
+.admin-card h3 {
+  margin-top: 0;
+}
+
+/* Better medium screen behavior */
+@media (max-width: 1050px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
+  .scoreboard-card {
+    justify-self: stretch;
+    max-width: none;
+  }
+
+  .games-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Phone/tablet cleanup */
+@media (max-width: 700px) {
+  .app-shell {
+    width: min(100% - 28px, 1280px);
+    padding-top: 28px;
+  }
+
+  .hero h1 {
+    font-size: clamp(3.4rem, 16vw, 5.5rem);
+  }
+
+  .auth-bar,
+  .section-heading,
+  .picker-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .auth-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .teams-grid,
+  .pick-board {
+    grid-template-columns: 1fr;
+  }
+
+  .value-badge {
+    width: 54px;
+    height: 54px;
+  }
+}
