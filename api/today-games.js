@@ -1,5 +1,32 @@
-import { ODDS_API_KEY, ODDS_BASE_URL, NBA_SCOREBOARD_URL, NBA_INJURY_REPORT_URL } from "./config.js";
+import { ODDS_API_KEY, ODDS_BASE_URL, NBA_SCOREBOARD_BASE_URL, NBA_INJURY_REPORT_URL } from "./config.js";
 import { json, normalizeTeamName, sameDateChicago, inferRoundForDate, americanOddsToString } from "./utils.js";
+
+function getChicagoDateString() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date());
+
+  const year = parts.find(part => part.type === "year").value;
+  const month = parts.find(part => part.type === "month").value;
+  const day = parts.find(part => part.type === "day").value;
+
+  return `${year}${month}${day}`;
+}
+
+function getScoreboardUrl(req) {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const requestedDate = url.searchParams.get("date");
+
+  if (requestedDate) {
+    const cleanDate = requestedDate.replaceAll("-", "");
+    return `${NBA_SCOREBOARD_BASE_URL}/scoreboard_${cleanDate}.json`;
+  }
+
+  return `${NBA_SCOREBOARD_BASE_URL}/scoreboard_${getChicagoDateString()}.json`;
+}
 
 async function fetchJson(url) {
   const response = await fetch(url, { headers: { "Accept": "application/json" } });
@@ -142,7 +169,8 @@ function mapNbaGame(game, oddsGames) {
 
 export default async function handler(req, res) {
   try {
-    const [scoreboard, oddsGames] = await Promise.all([fetchJson(NBA_SCOREBOARD_URL), getOdds()]);
+    const scoreboardUrl = getScoreboardUrl(req);
+    const [scoreboard, oddsGames] = await Promise.all([fetchJson(scoreboardUrl), getOdds()]);
     const games = scoreboard?.scoreboard?.games || [];
     const today = new URL(req.url, `http://${req.headers.host}`).searchParams.get("date") || null;
     const mapped = games
