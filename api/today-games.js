@@ -2,8 +2,8 @@ import {
   ODDS_API_KEY,
   ODDS_BASE_URL,
   NBA_SCOREBOARD_URL,
-  NBA_SCOREBOARD_V3_URL,
-  NBA_INJURY_REPORT_URL
+  NBA_INJURY_REPORT_URL,
+  NBA_TEAMS
 } from "./config.js";
 
 import {
@@ -30,18 +30,18 @@ async function fetchJson(url, options = {}) {
   return response.json();
 }
 
-async function fetchNbaStatsJson(url) {
-  return fetchJson(url, {
-    headers: {
-      "Accept": "application/json, text/plain, */*",
-      "Origin": "https://www.nba.com",
-      "Referer": "https://www.nba.com/",
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-      "x-nba-stats-origin": "stats",
-      "x-nba-stats-token": "true"
-    }
-  });
+function getChicagoDateString() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
+}
+
+function getRequestedDate(req) {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  return url.searchParams.get("date") || getChicagoDateString();
 }
 
 async function getOdds() {
@@ -57,343 +57,181 @@ async function getOdds() {
   }
 }
 
-function getChicagoDateString() {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Chicago",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(new Date());
-
-  const year = parts.find(part => part.type === "year")?.value;
-  const month = parts.find(part => part.type === "month")?.value;
-  const day = parts.find(part => part.type === "day")?.value;
-
-  return `${year}-${month}-${day}`;
-}
-
-function getRequestedDate(req) {
-  const url = new URL(req.url, `http://${req.headers.host}`);
-  return url.searchParams.get("date") || getChicagoDateString();
-}
-
-function getScoreboardV3Url(dateString) {
-  return `${NBA_SCOREBOARD_V3_URL}?GameDate=${encodeURIComponent(dateString)}&LeagueID=00`;
-}
-
-function resultSetToObjects(resultSet) {
-  if (!resultSet) return [];
-
-  const headers =
-    resultSet.headers ||
-    resultSet.Headers ||
-    resultSet.columns ||
-    resultSet.Columns ||
-    [];
-
-  const rows =
-    resultSet.rowSet ||
-    resultSet.RowSet ||
-    resultSet.rows ||
-    resultSet.Rows ||
-    [];
-
-  return rows.map(row => {
-    const obj = {};
-    headers.forEach((header, index) => {
-      obj[header] = row[index];
-    });
-    return obj;
-  });
-}
-
-function getResultSet(payload, name) {
-  const sets = payload?.resultSets || payload?.ResultSets;
-
-  if (!sets) return null;
-
-  if (Array.isArray(sets)) {
-    return sets.find(set =>
-      String(set.name || set.Name || "").toLowerCase() === name.toLowerCase()
-    );
-  }
-
-  return sets[name] || sets[name.toLowerCase()] || null;
-}
-
-function parseEtGameTimeToUtc(dateString, statusText) {
-  const text = String(statusText || "");
-  const match = text.match(/(\d{1,2}):(\d{2})\s*(am|pm)\s*ET/i);
-
-  if (!match) {
-    return `${dateString}T17:00:00Z`;
-  }
-
-  let hour = Number(match[1]);
-  const minute = Number(match[2]);
-  const ampm = match[3].toLowerCase();
-
-  if (ampm === "pm" && hour !== 12) hour += 12;
-  if (ampm === "am" && hour === 12) hour = 0;
-
-  const month = Number(dateString.slice(5, 7));
-  const easternOffsetHours = month >= 3 && month <= 11 ? 4 : 5;
-  const utcHour = hour + easternOffsetHours;
-
-  const date = new Date(`${dateString}T00:00:00Z`);
-  date.setUTCHours(utcHour, minute, 0, 0);
-
-  return date.toISOString();
-}
-
-function normalizeV3PayloadToGames(payload, requestedDate) {
-  if (payload?.scoreboard?.games?.length) {
-    return payload.scoreboard.games;
-  }
-
-  if (payload?.games?.length) {
-    return payload.games;
-  }
-
-  const gameHeaderSet = getResultSet(payload, "GameHeader");
-  const lineScoreSet = getResultSet(payload, "LineScore");
-  const seriesSet = getResultSet(payload, "SeriesStandings");
-
-  const gameHeaders = resultSetToObjects(gameHeaderSet);
-  const lineScores = resultSetToObjects(lineScoreSet);
-  const seriesRows = resultSetToObjects(seriesSet);
-
-  if (!gameHeaders.length) return [];
-
-  return gameHeaders.map(header => {
-    const gameId = String(header.GAME_ID || header.GameID || header.gameId || "");
-    const homeTeamId = String(header.HOME_TEAM_ID || header.HomeTeamID || "");
-    const awayTeamId = String(header.VISITOR_TEAM_ID || header.AWAY_TEAM_ID || header.AwayTeamID || "");
-
-    const homeLine = lineScores.find(row => String(row.TEAM_ID) === homeTeamId) || {};
-    const awayLine = lineScores.find(row => String(row.TEAM_ID) === awayTeamId) || {};
-
-    const series = seriesRows.find(row => String(row.GAME_ID || row.GameID || "") === gameId) || {};
-
-    const status = Number(header.GAME_STATUS_ID || header.GAME_STATUS || header.gameStatus || 1);
-    const statusText = String(header.GAME_STATUS_TEXT || header.gameStatusText || header.STATUS_TEXT || "Scheduled");
-
-    const gameDate =
-      header.GAME_DATE_EST ||
-      header.GAME_DATE ||
-      header.GameDate ||
-      requestedDate;
-
-    const cleanDate = String(gameDate).slice(0, 10);
-
-    return {
-      gameId,
-      gameCode: header.GAMECODE || header.GAME_CODE || header.gameCode || "",
-      gameStatus: status,
-      gameStatusText: statusText,
-      period: Number(header.LIVE_PERIOD || header.PERIOD || header.period || 0),
-      gameClock: header.LIVE_PC_TIME || header.GAME_CLOCK || header.gameClock || "",
-      gameTimeUTC:
-        header.GAME_TIME_UTC ||
-        header.gameTimeUTC ||
-        parseEtGameTimeToUtc(cleanDate, statusText),
-      arenaName: header.ARENA_NAME || header.ARENA || header.arenaName || "",
-      gameLabel: header.GAME_SUBTYPE || header.GAME_LABEL || header.gameLabel || "",
-      seriesText:
-        series.SERIES_TEXT ||
-        series.SeriesText ||
-        header.SERIES_TEXT ||
-        header.seriesText ||
-        "",
-
-      homeTeam: {
-        teamId: homeTeamId,
-        teamCity:
-          homeLine.TEAM_CITY_NAME ||
-          header.HOME_TEAM_CITY ||
-          header.HOME_TEAM_CITY_NAME ||
-          "Home",
-        teamName:
-          homeLine.TEAM_NAME ||
-          header.HOME_TEAM_NAME ||
-          "Team",
-        teamTricode:
-          homeLine.TEAM_ABBREVIATION ||
-          header.HOME_TEAM_ABBREVIATION ||
-          header.HOME_TEAM_TRICODE ||
-          "HOME",
-        score:
-          homeLine.PTS ||
-          header.HOME_TEAM_SCORE ||
-          0
-      },
-
-      awayTeam: {
-        teamId: awayTeamId,
-        teamCity:
-          awayLine.TEAM_CITY_NAME ||
-          header.VISITOR_TEAM_CITY ||
-          header.AWAY_TEAM_CITY ||
-          header.VISITOR_TEAM_CITY_NAME ||
-          "Away",
-        teamName:
-          awayLine.TEAM_NAME ||
-          header.VISITOR_TEAM_NAME ||
-          header.AWAY_TEAM_NAME ||
-          "Team",
-        teamTricode:
-          awayLine.TEAM_ABBREVIATION ||
-          header.VISITOR_TEAM_ABBREVIATION ||
-          header.AWAY_TEAM_ABBREVIATION ||
-          header.VISITOR_TEAM_TRICODE ||
-          "AWAY",
-        score:
-          awayLine.PTS ||
-          header.VISITOR_TEAM_SCORE ||
-          header.AWAY_TEAM_SCORE ||
-          0
-      }
-    };
-  });
-}
-
-async function getNbaGames(requestedDate) {
-  let v3Games = [];
-  let liveGames = [];
-  let sourceParts = [];
-
-  try {
-    const v3Payload = await fetchNbaStatsJson(getScoreboardV3Url(requestedDate));
-    v3Games = normalizeV3PayloadToGames(v3Payload, requestedDate);
-    if (v3Games.length) sourceParts.push("NBA ScoreboardV3");
-  } catch (error) {
-    console.error("NBA ScoreboardV3 fetch failed", error);
-  }
-
+async function getLiveScoreboardGames() {
   try {
     const livePayload = await fetchJson(NBA_SCOREBOARD_URL);
-    liveGames = livePayload?.scoreboard?.games || [];
-    if (liveGames.length) sourceParts.push("NBA live scoreboard");
+    return livePayload?.scoreboard?.games || [];
   } catch (error) {
     console.error("NBA live scoreboard fetch failed", error);
+    return [];
   }
-
-  if (!v3Games.length && !liveGames.length) {
-    throw new Error("No NBA scoreboard source returned games.");
-  }
-
-  const liveById = new Map(liveGames.map(game => [String(game.gameId), game]));
-
-  const baseGames = v3Games.length ? v3Games : liveGames;
-
-  const mergedGames = baseGames.map(game => {
-    const live = liveById.get(String(game.gameId));
-    return live ? { ...game, ...live } : game;
-  });
-
-  return {
-    games: mergedGames,
-    source: sourceParts.length ? `${sourceParts.join(" + ")} + The Odds API` : "NBA + The Odds API"
-  };
 }
 
-function findMatchingOdds(nbaGame, oddsGames) {
-  const home = normalizeTeamName(
-    nbaGame.homeTeam.teamName ||
-      `${nbaGame.homeTeam.teamCity} ${nbaGame.homeTeam.teamName}`
-  );
+function teamFromName(fullName) {
+  const key = normalizeTeamName(fullName);
+  const team = NBA_TEAMS[key];
 
-  const away = normalizeTeamName(
-    nbaGame.awayTeam.teamName ||
-      `${nbaGame.awayTeam.teamCity} ${nbaGame.awayTeam.teamName}`
-  );
+  if (team) {
+    return {
+      id: team.id,
+      city: team.city,
+      name: team.name,
+      fullName: `${team.city} ${team.name}`,
+      triCode: team.triCode,
+      score: 0
+    };
+  }
 
-  const homeFull = normalizeTeamName(`${nbaGame.homeTeam.teamCity} ${nbaGame.homeTeam.teamName}`);
-  const awayFull = normalizeTeamName(`${nbaGame.awayTeam.teamCity} ${nbaGame.awayTeam.teamName}`);
+  const parts = String(fullName || "Unknown Team").split(" ");
+  const name = parts.pop() || "Team";
+  const city = parts.join(" ") || "Unknown";
 
-  return oddsGames.find(game => {
-    const oddsHome = normalizeTeamName(game.home_team);
-    const oddsAway = normalizeTeamName(game.away_team);
-
-    return (
-      (oddsHome.includes(home) || homeFull.includes(oddsHome) || oddsHome.includes(homeFull)) &&
-      (oddsAway.includes(away) || awayFull.includes(oddsAway) || oddsAway.includes(awayFull))
-    ) || (
-      (oddsHome.includes(away) || awayFull.includes(oddsHome) || oddsHome.includes(awayFull)) &&
-      (oddsAway.includes(home) || homeFull.includes(oddsAway) || oddsAway.includes(homeFull))
-    );
-  });
+  return {
+    id: key || fullName,
+    city,
+    name,
+    fullName: `${city} ${name}`.trim(),
+    triCode: name.slice(0, 3).toUpperCase(),
+    score: 0
+  };
 }
 
 function selectBestBookmaker(oddsGame) {
   if (!oddsGame?.bookmakers?.length) return null;
 
   const preferred = ["draftkings", "fanduel", "betmgm", "caesars", "betrivers", "espnbet"];
-
   return oddsGame.bookmakers.find(book => preferred.includes(book.key)) || oddsGame.bookmakers[0];
 }
 
-function mapOddsToTeams(nbaGame, oddsGame) {
-  const empty = {
-    bookmaker: "No listed book",
-    homeOdds: "—",
-    awayOdds: "—",
-    lastUpdate: null
-  };
-
-  if (!oddsGame) return empty;
-
+function getH2HMarket(oddsGame) {
   const book = selectBestBookmaker(oddsGame);
-  const market = book?.markets?.find(market => market.key === "h2h");
+  const market = book?.markets?.find(item => item.key === "h2h") || null;
+  return { book, market };
+}
 
-  if (!market) return empty;
+function oddsForTeam(market, teamFullName) {
+  const teamKey = normalizeTeamName(teamFullName);
+  const outcome = market?.outcomes?.find(item => {
+    const outcomeKey = normalizeTeamName(item.name);
+    return outcomeKey === teamKey || outcomeKey.includes(teamKey) || teamKey.includes(outcomeKey);
+  });
 
-  const homeFull = normalizeTeamName(`${nbaGame.homeTeam.teamCity} ${nbaGame.homeTeam.teamName}`);
-  const awayFull = normalizeTeamName(`${nbaGame.awayTeam.teamCity} ${nbaGame.awayTeam.teamName}`);
-
-  let homePrice = null;
-  let awayPrice = null;
-
-  for (const outcome of market.outcomes || []) {
-    const name = normalizeTeamName(outcome.name);
-
-    if (
-      homeFull.includes(name) ||
-      name.includes(homeFull) ||
-      name.includes(normalizeTeamName(nbaGame.homeTeam.teamName))
-    ) {
-      homePrice = outcome.price;
-    }
-
-    if (
-      awayFull.includes(name) ||
-      name.includes(awayFull) ||
-      name.includes(normalizeTeamName(nbaGame.awayTeam.teamName))
-    ) {
-      awayPrice = outcome.price;
-    }
-  }
-
-  return {
-    bookmaker: book?.title || "Listed book",
-    homeOdds: americanOddsToString(homePrice),
-    awayOdds: americanOddsToString(awayPrice),
-    lastUpdate: book?.last_update || oddsGame.commence_time || null
-  };
+  return americanOddsToString(outcome?.price);
 }
 
 function makeSeriesText(game) {
   const label = game.gameLabel || game.gameEt || "";
   const seriesText = game.seriesText || "";
-
   return seriesText || label || "Series info updates when listed by NBA.";
 }
 
-function mapNbaGame(game, oddsGames) {
+function liveGameMatchesOddsGame(liveGame, oddsGame) {
+  const liveHome = normalizeTeamName(`${liveGame.homeTeam?.teamCity || ""} ${liveGame.homeTeam?.teamName || ""}`);
+  const liveAway = normalizeTeamName(`${liveGame.awayTeam?.teamCity || ""} ${liveGame.awayTeam?.teamName || ""}`);
+  const oddsHome = normalizeTeamName(oddsGame.home_team);
+  const oddsAway = normalizeTeamName(oddsGame.away_team);
+
+  return (
+    (liveHome.includes(oddsHome) || oddsHome.includes(liveHome)) &&
+    (liveAway.includes(oddsAway) || oddsAway.includes(liveAway))
+  ) || (
+    (liveHome.includes(oddsAway) || oddsAway.includes(liveHome)) &&
+    (liveAway.includes(oddsHome) || oddsHome.includes(liveAway))
+  );
+}
+
+function findLiveMatchForOddsGame(oddsGame, liveGames) {
+  return liveGames.find(game => liveGameMatchesOddsGame(game, oddsGame)) || null;
+}
+
+function mapOddsGameToDashboardGame(oddsGame, liveGames) {
+  const liveGame = findLiveMatchForOddsGame(oddsGame, liveGames);
+  const gameDate = sameDateChicago(oddsGame.commence_time);
+  const round = inferRoundForDate(gameDate, liveGame?.gameLabel || liveGame?.gameEt || "");
+
+  const homeTeam = teamFromName(oddsGame.home_team);
+  const awayTeam = teamFromName(oddsGame.away_team);
+
+  if (liveGame) {
+    homeTeam.id = String(liveGame.homeTeam?.teamId || homeTeam.id);
+    homeTeam.city = liveGame.homeTeam?.teamCity || homeTeam.city;
+    homeTeam.name = liveGame.homeTeam?.teamName || homeTeam.name;
+    homeTeam.fullName = `${homeTeam.city} ${homeTeam.name}`;
+    homeTeam.triCode = liveGame.homeTeam?.teamTricode || homeTeam.triCode;
+    homeTeam.score = Number(liveGame.homeTeam?.score || 0);
+
+    awayTeam.id = String(liveGame.awayTeam?.teamId || awayTeam.id);
+    awayTeam.city = liveGame.awayTeam?.teamCity || awayTeam.city;
+    awayTeam.name = liveGame.awayTeam?.teamName || awayTeam.name;
+    awayTeam.fullName = `${awayTeam.city} ${awayTeam.name}`;
+    awayTeam.triCode = liveGame.awayTeam?.teamTricode || awayTeam.triCode;
+    awayTeam.score = Number(liveGame.awayTeam?.score || 0);
+  }
+
+  const { book, market } = getH2HMarket(oddsGame);
+
+  const odds = {
+    bookmaker: book?.title || "No listed book",
+    homeOdds: oddsForTeam(market, oddsGame.home_team),
+    awayOdds: oddsForTeam(market, oddsGame.away_team),
+    lastUpdate: book?.last_update || oddsGame.commence_time || null
+  };
+
+  const isFinal = liveGame
+    ? Number(liveGame.gameStatus) === 3 || /final/i.test(liveGame.gameStatusText || "")
+    : false;
+
+  const winnerTeamId = isFinal
+    ? homeTeam.score > awayTeam.score
+      ? homeTeam.id
+      : awayTeam.score > homeTeam.score
+        ? awayTeam.id
+        : null
+    : null;
+
+  const gameId = liveGame?.gameId
+    ? String(liveGame.gameId)
+    : `odds-${gameDate}-${awayTeam.triCode}-${homeTeam.triCode}`;
+
+  return {
+    gameId,
+    gameCode: liveGame?.gameCode || `${gameDate.replaceAll("-", "")}/${awayTeam.triCode}${homeTeam.triCode}`,
+    date: gameDate,
+    status: Number(liveGame?.gameStatus || 1),
+    statusText: liveGame?.gameStatusText || new Date(oddsGame.commence_time).toLocaleTimeString("en-US", {
+      timeZone: "America/New_York",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short"
+    }),
+    period: Number(liveGame?.period || 0),
+    clock: liveGame?.gameClock || "",
+    gameTimeUTC: oddsGame.commence_time,
+    arena: liveGame?.arenaName || "",
+    homeTeam,
+    awayTeam,
+    seriesText: liveGame ? makeSeriesText(liveGame) : "Series info updates when listed by NBA.",
+    gameLabel: liveGame?.gameLabel || liveGame?.gameEt || "",
+    round,
+    odds,
+    isFinal,
+    winnerTeamId,
+    injuryReportUrl: NBA_INJURY_REPORT_URL,
+    recapSeed: {
+      title: `${awayTeam.fullName} at ${homeTeam.fullName}`,
+      summary: `${awayTeam.fullName} visit ${homeTeam.fullName}. Current moneyline is ${awayTeam.triCode} ${odds.awayOdds} and ${homeTeam.triCode} ${odds.homeOdds} via ${odds.bookmaker}.`,
+      injuryNote: "Use the linked official NBA injury report for the latest availability before tipoff.",
+      oddsNote: odds.lastUpdate
+        ? `Odds last updated ${new Date(odds.lastUpdate).toLocaleString("en-US", { timeZone: "America/Chicago" })}.`
+        : "Odds may not be posted yet."
+    }
+  };
+}
+
+function mapLiveGameToDashboardGame(game, oddsGames) {
   const gameDate = sameDateChicago(game.gameTimeUTC || game.gameTimeLTZ || Date.now());
+  const matchingOdds = oddsGames.find(oddsGame => liveGameMatchesOddsGame(game, oddsGame));
   const round = inferRoundForDate(gameDate, game.gameLabel || game.gameEt || "");
-  const oddsGame = findMatchingOdds(game, oddsGames);
-  const odds = mapOddsToTeams(game, oddsGame);
 
   const homeTeam = {
     id: String(game.homeTeam.teamId),
@@ -411,6 +249,15 @@ function mapNbaGame(game, oddsGames) {
     fullName: `${game.awayTeam.teamCity} ${game.awayTeam.teamName}`,
     triCode: game.awayTeam.teamTricode,
     score: Number(game.awayTeam.score || 0)
+  };
+
+  const { book, market } = getH2HMarket(matchingOdds);
+
+  const odds = {
+    bookmaker: book?.title || "No listed book",
+    homeOdds: oddsForTeam(market, homeTeam.fullName),
+    awayOdds: oddsForTeam(market, awayTeam.fullName),
+    lastUpdate: book?.last_update || matchingOdds?.commence_time || null
   };
 
   const isFinal = Number(game.gameStatus) === 3 || /final/i.test(game.gameStatusText || "");
@@ -447,32 +294,56 @@ function mapNbaGame(game, oddsGames) {
       summary: `${awayTeam.fullName} visit ${homeTeam.fullName}. ${makeSeriesText(game)}. Current moneyline is ${awayTeam.triCode} ${odds.awayOdds} and ${homeTeam.triCode} ${odds.homeOdds} via ${odds.bookmaker}.`,
       injuryNote: "Use the linked official NBA injury report for the latest availability before tipoff.",
       oddsNote: odds.lastUpdate
-        ? `Odds last updated ${new Date(odds.lastUpdate).toLocaleString("en-US", {
-            timeZone: "America/Chicago"
-          })}.`
+        ? `Odds last updated ${new Date(odds.lastUpdate).toLocaleString("en-US", { timeZone: "America/Chicago" })}.`
         : "Odds may not be posted yet."
     }
   };
+}
+
+function dedupeGames(games) {
+  const seen = new Set();
+  const output = [];
+
+  for (const game of games) {
+    const key = game.gameId || `${game.date}-${game.awayTeam.triCode}-${game.homeTeam.triCode}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(game);
+  }
+
+  return output.sort((a, b) => new Date(a.gameTimeUTC) - new Date(b.gameTimeUTC));
 }
 
 export default async function handler(req, res) {
   try {
     const requestedDate = getRequestedDate(req);
 
-    const [nbaData, oddsGames] = await Promise.all([
-      getNbaGames(requestedDate),
-      getOdds()
+    const [oddsGames, liveGames] = await Promise.all([
+      getOdds(),
+      getLiveScoreboardGames()
     ]);
 
-    const mapped = nbaData.games
-      .map(game => mapNbaGame(game, oddsGames))
+    const oddsDashboardGames = oddsGames
+      .filter(game => sameDateChicago(game.commence_time) === requestedDate)
+      .map(game => mapOddsGameToDashboardGame(game, liveGames));
+
+    const liveDashboardGames = liveGames
+      .map(game => mapLiveGameToDashboardGame(game, oddsGames))
       .filter(game => game.date === requestedDate);
+
+    const games = dedupeGames([...oddsDashboardGames, ...liveDashboardGames]);
 
     return json(res, 200, {
       generatedAt: new Date().toISOString(),
       requestedDate,
-      source: nbaData.source,
-      games: mapped
+      source: "The Odds API schedule + NBA live scoreboard",
+      debugCounts: {
+        oddsGames: oddsGames.length,
+        liveGames: liveGames.length,
+        oddsGamesForRequestedDate: oddsDashboardGames.length,
+        liveGamesForRequestedDate: liveDashboardGames.length
+      },
+      games
     });
   } catch (error) {
     console.error(error);
