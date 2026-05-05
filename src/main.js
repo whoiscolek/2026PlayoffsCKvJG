@@ -8,7 +8,19 @@ const state = {
   picks: new Map(),
   ledger: [],
   roundOverrides: new Map(),
-  selectedTab: "games"
+  selectedTab: "games",
+  access: null,
+  auth: {
+    cole: localStorage.getItem("jcnb_role_cole") === "true",
+    jamie: localStorage.getItem("jcnb_role_jamie") === "true",
+    admin: localStorage.getItem("jcnb_role_admin") === "true"
+  }
+};
+
+const DEFAULT_PASSWORDS = {
+  cole: "cole",
+  jamie: "jamie",
+  admin: "admin"
 };
 
 const els = {
@@ -24,22 +36,37 @@ const els = {
   manualGradeBtn: document.querySelector("#manual-grade-btn"),
   roundGameId: document.querySelector("#round-game-id"),
   roundKey: document.querySelector("#round-key"),
-  roundSaveBtn: document.querySelector("#round-save-btn")
+  roundSaveBtn: document.querySelector("#round-save-btn"),
+  authStatus: document.querySelector("#auth-status"),
+  loginColeBtn: document.querySelector("#login-cole-btn"),
+  loginJamieBtn: document.querySelector("#login-jamie-btn"),
+  loginAdminBtn: document.querySelector("#login-admin-btn"),
+  logoutBtn: document.querySelector("#logout-btn"),
+  passwordRole: document.querySelector("#password-role"),
+  currentPassword: document.querySelector("#current-password"),
+  newPassword: document.querySelector("#new-password"),
+  changePasswordBtn: document.querySelector("#change-password-btn"),
+  adminOnlyControls: document.querySelectorAll(".admin-only-control")
 };
 
 init().catch(error => {
   console.error("App failed to initialize:", error);
   if (els.authStatus) {
-    els.authStatus.textContent = "App error — check browser console.";
+    els.authStatus.textContent = "App error — open Console for details.";
   }
 });
 
 async function init() {
+  // Wire all buttons first so a Firebase/API failure does not leave the page dead.
   wireTabs();
   wireAdmin();
   wireAuth();
 
-  els.refreshBtn.addEventListener("click", refreshAll);
+  if (els.refreshBtn) {
+    els.refreshBtn.addEventListener("click", refreshAll);
+  }
+
+  renderAuth();
 
   try {
     subscribeToPicks();
@@ -51,24 +78,15 @@ async function init() {
 
   try {
     await ensureAccessDoc();
+    renderAuth();
   } catch (error) {
     console.error("Access/password setup failed:", error);
     if (els.authStatus) {
-      els.authStatus.textContent = "Login setup failed — check Firebase/Firestore.";
+      els.authStatus.textContent = "Login setup failed — check Firestore rules.";
     }
   }
 
-  renderAuth();
-
-  try {
-    await refreshAll();
-  } catch (error) {
-    console.error("Game refresh failed:", error);
-    if (els.lastUpdated) {
-      els.lastUpdated.textContent = "Could not load games. Check /api/today-games.";
-    }
-  }
-
+  await refreshAll();
   setInterval(refreshAll, 90_000);
 }
 
@@ -86,6 +104,8 @@ function wireTabs() {
 
 function wireAdmin() {
   els.manualGradeBtn.addEventListener("click", async () => {
+    const ok = await requireLogin("admin");
+    if (!ok) return;
     const gameId = els.manualGameId.value.trim();
     const winnerTeamId = els.manualWinnerId.value.trim();
     const game = state.games.find(g => g.gameId === gameId);
@@ -96,6 +116,8 @@ function wireAdmin() {
   });
 
   els.roundSaveBtn.addEventListener("click", async () => {
+    const ok = await requireLogin("admin");
+    if (!ok) return;
     const gameId = els.roundGameId.value.trim();
     const key = els.roundKey.value;
     const round = { key, label: ROUND_VALUES[key].label, value: ROUND_VALUES[key].value };
@@ -104,11 +126,127 @@ function wireAdmin() {
   });
 }
 
+function wireAuth() {
+  els.loginColeBtn.addEventListener("click", () => requireLogin("cole"));
+  els.loginJamieBtn.addEventListener("click", () => requireLogin("jamie"));
+  els.loginAdminBtn.addEventListener("click", () => requireLogin("admin"));
+  els.logoutBtn.addEventListener("click", logoutAll);
+  els.changePasswordBtn.addEventListener("click", changePassword);
+}
+
+async function ensureAccessDoc() {
+  const ref = doc(db, "settings", "access");
+  const snap = await getDoc(ref);
+  if (snap.exists()) {
+    state.access = snap.data();
+    return;
+  }
+
+  const defaults = {
+    coleHash: await hashPassword("cole", DEFAULT_PASSWORDS.cole),
+    jamieHash: await hashPassword("jamie", DEFAULT_PASSWORDS.jamie),
+    adminHash: await hashPassword("admin", DEFAULT_PASSWORDS.admin),
+    initializedAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  };
+  await setDoc(ref, defaults);
+  state.access = defaults;
+}
+
+async function refreshAccessDoc() {
+  const snap = await getDoc(doc(db, "settings", "access"));
+  if (snap.exists()) state.access = snap.data();
+}
+
+async function requireLogin(role) {
+  if (state.auth[role]) return true;
+
+  const label = roleLabel(role);
+  const password = window.prompt(`Enter ${label} password:`);
+  if (!password) return false;
+
+  try {
+    await refreshAccessDoc();
+  } catch (error) {
+    console.error("Could not refresh password settings:", error);
+  }
+
+  const supplied = await hashPassword(role, password);
+  const expected = state.access?.[`${role}Hash`] || await hashPassword(role, DEFAULT_PASSWORDS[role]);
+
+  if (supplied !== expected) {
+    alert(`Wrong ${label} password.`);
+    return false;
+  }
+
+  state.auth[role] = true;
+  localStorage.setItem(`jcnb_role_${role}`, "true");
+  renderAuth();
+  render();
+  return true;
+}
+
+async function changePassword() {
+  const role = els.passwordRole.value;
+  const currentPassword = els.currentPassword.value;
+  const newPassword = els.newPassword.value;
+  if (!newPassword || newPassword.length < 4) return alert("New password must be at least 4 characters.");
+
+  const loggedIn = await requireLogin(role);
+  if (!loggedIn) return;
+
+  await refreshAccessDoc();
+  const currentHash = await hashPassword(role, currentPassword);
+  const expected = state.access?.[`${role}Hash`];
+  if (currentHash !== expected) return alert("Current password is incorrect.");
+
+  const updates = {
+    [`${role}Hash`]: await hashPassword(role, newPassword),
+    updatedAt: serverTimestamp()
+  };
+  await setDoc(doc(db, "settings", "access"), updates, { merge: true });
+  await refreshAccessDoc();
+  els.currentPassword.value = "";
+  els.newPassword.value = "";
+  alert(`${roleLabel(role)} password changed.`);
+}
+
+function logoutAll() {
+  ["cole", "jamie", "admin"].forEach(role => {
+    state.auth[role] = false;
+    localStorage.removeItem(`jcnb_role_${role}`);
+  });
+  renderAuth();
+  render();
+}
+
+function renderAuth() {
+  const active = ["cole", "jamie", "admin"].filter(role => state.auth[role]).map(roleLabel);
+  els.authStatus.textContent = active.length ? `Signed in as: ${active.join(", ")}` : "No one is signed in. Picks require the matching password.";
+  els.adminOnlyControls.forEach(item => {
+    item.classList.toggle("locked-control", !state.auth.admin);
+  });
+}
+
+async function hashPassword(role, password) {
+  const data = new TextEncoder().encode(`jamie-cole-nba-bets::${role}::${password}`);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function roleLabel(role) {
+  if (role === "cole") return "Cole";
+  if (role === "jamie") return "Jamie";
+  return "Admin";
+}
+
 function subscribeToPicks() {
   onSnapshot(collection(db, "picks"), snapshot => {
     state.picks.clear();
     snapshot.forEach(item => state.picks.set(item.id, item.data()));
     render();
+  }, error => {
+    console.error("Picks listener failed:", error);
   });
 }
 
@@ -117,6 +255,8 @@ function subscribeToLedger() {
     state.ledger = snapshot.docs.map(item => ({ id: item.id, ...item.data() }));
     renderLedger();
     renderBalances();
+  }, error => {
+    console.error("Ledger listener failed:", error);
   });
 }
 
@@ -126,6 +266,8 @@ function subscribeToRoundOverrides() {
     snapshot.forEach(item => state.roundOverrides.set(item.id, item.data().round));
     applyRoundOverrides();
     render();
+  }, error => {
+    console.error("Round override listener failed:", error);
   });
 }
 
@@ -241,6 +383,7 @@ function renderGameCard(game) {
 
   const clear = node.querySelector(".clear-picks");
   clear.disabled = locked;
+  clear.textContent = state.auth.admin ? "Clear picks" : "Clear picks (admin)";
   clear.addEventListener("click", () => clearPicks(game.gameId));
 
   node.querySelector(".recap-summary").textContent = game.recapSeed.summary;
@@ -258,6 +401,8 @@ function renderGameCard(game) {
 
 async function savePick(game, person, teamId) {
   if (isLocked(game)) return alert("Picks are locked at scheduled tipoff.");
+  const ok = await requireLogin(person);
+  if (!ok) return;
   const previous = state.picks.get(game.gameId) || {};
   const picks = { ...(previous.picks || {}), [person]: teamId };
   await setDoc(doc(db, "picks", game.gameId), {
@@ -272,6 +417,8 @@ async function savePick(game, person, teamId) {
 }
 
 async function clearPicks(gameId) {
+  const ok = await requireLogin("admin");
+  if (!ok) return;
   await deleteDoc(doc(db, "picks", gameId));
 }
 
