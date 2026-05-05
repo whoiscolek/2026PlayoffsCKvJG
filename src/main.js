@@ -35,6 +35,10 @@ const els = {
   manualWinnerId: document.querySelector("#manual-winner-id"),
   manualGradeBtn: document.querySelector("#manual-grade-btn"),
   roundGameId: document.querySelector("#round-game-id"),
+  overrideGameId: document.querySelector("#override-game-id"),
+  overrideColeTeamId: document.querySelector("#override-cole-team-id"),
+  overrideJamieTeamId: document.querySelector("#override-jamie-team-id"),
+  overridePicksBtn: document.querySelector("#override-picks-btn"),
   roundKey: document.querySelector("#round-key"),
   roundSaveBtn: document.querySelector("#round-save-btn"),
   authStatus: document.querySelector("#auth-status"),
@@ -106,14 +110,41 @@ function wireAdmin() {
   els.manualGradeBtn.addEventListener("click", async () => {
     const ok = await requireLogin("admin");
     if (!ok) return;
+
     const gameId = els.manualGameId.value.trim();
     const winnerTeamId = els.manualWinnerId.value.trim();
     const game = state.games.find(g => g.gameId === gameId);
-    if (!game || !winnerTeamId) return alert("Need a valid game ID and winner team ID.");
+
+    if (!game || !winnerTeamId) {
+      return alert("Need a valid game ID and winner team ID.");
+    }
+
     const manualGame = { ...game, isFinal: true, winnerTeamId };
     await maybeGradeAndSave(manualGame);
     alert("Manual settlement attempted. Check ledger.");
   });
+
+  els.roundSaveBtn.addEventListener("click", async () => {
+    const ok = await requireLogin("admin");
+    if (!ok) return;
+
+    const gameId = els.roundGameId.value.trim();
+    const key = els.roundKey.value;
+    const round = { key, label: ROUND_VALUES[key].label, value: ROUND_VALUES[key].value };
+
+    await setDoc(doc(db, "roundOverrides", gameId), {
+      gameId,
+      round,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+
+    alert("Round override saved.");
+  });
+
+  if (els.overridePicksBtn) {
+    els.overridePicksBtn.addEventListener("click", overridePicks);
+  }
+}
 
   els.roundSaveBtn.addEventListener("click", async () => {
     const ok = await requireLogin("admin");
@@ -441,6 +472,52 @@ async function clearPicks(gameId) {
   const ok = await requireLogin("admin");
   if (!ok) return;
   await deleteDoc(doc(db, "picks", gameId));
+}
+
+async function overridePicks() {
+  const ok = await requireLogin("admin");
+  if (!ok) return;
+
+  const gameId = els.overrideGameId.value.trim();
+  const coleTeamId = els.overrideColeTeamId.value.trim();
+  const jamieTeamId = els.overrideJamieTeamId.value.trim();
+
+  if (!gameId || !coleTeamId || !jamieTeamId) {
+    return alert("Need Game ID, Cole Team ID, and Jamie Team ID.");
+  }
+
+  const game = state.games.find(g => g.gameId === gameId);
+
+  if (!game) {
+    return alert("That Game ID is not currently loaded on today's dashboard. Use a Game ID from one of the visible game cards.");
+  }
+
+  const validTeamIds = [
+    String(game.homeTeam.id),
+    String(game.awayTeam.id)
+  ];
+
+  if (!validTeamIds.includes(String(coleTeamId)) || !validTeamIds.includes(String(jamieTeamId))) {
+    return alert("Cole/Jamie Team IDs must match the home or away Team IDs shown on that game card.");
+  }
+
+  await setDoc(doc(db, "picks", gameId), {
+    gameId,
+    matchup: `${game.awayTeam.fullName} at ${game.homeTeam.fullName}`,
+    gameTimeUTC: game.gameTimeUTC,
+    round: game.round,
+    teams: { home: game.homeTeam, away: game.awayTeam },
+    picks: {
+      cole: coleTeamId,
+      jamie: jamieTeamId
+    },
+    adminOverride: true,
+    updatedAt: serverTimestamp()
+  }, { merge: true });
+
+  await deleteDoc(doc(db, "ledger", gameId));
+
+  alert("Pick override saved. If the game is final, refresh or manually settle again so the ledger recalculates.");
 }
 
 function renderLedger() {
