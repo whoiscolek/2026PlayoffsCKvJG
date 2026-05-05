@@ -354,6 +354,7 @@ function renderGameCard(game) {
   const ledgerEvent = state.ledger.find(event => event.gameId === game.gameId);
 
   card.dataset.gameId = game.gameId;
+
   node.querySelector(".round-pill").textContent = game.round.label;
   node.querySelector(".matchup-title").textContent = `${game.awayTeam.fullName} at ${game.homeTeam.fullName}`;
   node.querySelector(".game-meta").textContent = `${formatGameTime(game.gameTimeUTC)} CT · ${game.statusText} · ${game.seriesText}`;
@@ -362,20 +363,32 @@ function renderGameCard(game) {
   node.querySelector(".away-code").textContent = game.awayTeam.triCode;
   node.querySelector(".away-name").textContent = game.awayTeam.fullName;
   node.querySelector(".away-odds").textContent = game.odds.awayOdds;
+
   node.querySelector(".home-code").textContent = game.homeTeam.triCode;
   node.querySelector(".home-name").textContent = game.homeTeam.fullName;
   node.querySelector(".home-odds").textContent = game.odds.homeOdds;
 
   node.querySelector(".cole-pick").textContent = getPickTeamLabel(game, pickDoc?.picks?.cole);
   node.querySelector(".jamie-pick").textContent = getPickTeamLabel(game, pickDoc?.picks?.jamie);
-  node.querySelector(".bet-status").textContent = ledgerEvent ? `${ledgerEvent.summary} · ${ledgerEvent.finalScore}` : betState.label;
+  node.querySelector(".bet-status").textContent = ledgerEvent
+    ? `${ledgerEvent.summary} · ${ledgerEvent.finalScore}`
+    : betState.label;
 
   const picker = node.querySelector(".picker-person");
+
   node.querySelectorAll(".team-pick").forEach(button => {
     const team = button.dataset.side === "home" ? game.homeTeam : game.awayTeam;
+
     button.dataset.teamId = team.id;
-    if (String(pickDoc?.picks?.cole) === String(team.id)) button.classList.add("cole-selected");
-    if (String(pickDoc?.picks?.jamie) === String(team.id)) button.classList.add("jamie-selected");
+
+    if (String(pickDoc?.picks?.cole) === String(team.id)) {
+      button.classList.add("cole-selected");
+    }
+
+    if (String(pickDoc?.picks?.jamie) === String(team.id)) {
+      button.classList.add("jamie-selected");
+    }
+
     button.disabled = locked;
     button.title = locked ? "Picks are locked after tipoff." : `Pick ${team.fullName}`;
     button.addEventListener("click", () => savePick(game, picker.value, team.id));
@@ -388,12 +401,20 @@ function renderGameCard(game) {
 
   node.querySelector(".recap-summary").textContent = game.recapSeed.summary;
   node.querySelector(".odds-note").textContent = `${game.recapSeed.oddsNote} Book: ${game.odds.bookmaker}.`;
+
   const injuryLink = node.querySelector(".injury-link");
   injuryLink.href = game.injuryReportUrl;
 
-  let footnote = `Game ID: ${game.gameId}. Home team ID: ${game.homeTeam.id}. Away team ID: ${game.awayTeam.id}.`;
-  if (locked && !game.isFinal) footnote += " Picks are locked.";
-  if (game.isFinal) footnote += ` Final: ${game.awayTeam.triCode} ${game.awayTeam.score}, ${game.homeTeam.triCode} ${game.homeTeam.score}.`;
+  let footnote = `Admin IDs — Game ID: ${game.gameId} · Away: ${game.awayTeam.fullName} = ${game.awayTeam.id} · Home: ${game.homeTeam.fullName} = ${game.homeTeam.id}`;
+
+  if (locked && !game.isFinal) {
+    footnote += " · Picks are locked.";
+  }
+
+  if (game.isFinal) {
+    footnote += ` · Final: ${game.awayTeam.triCode} ${game.awayTeam.score}, ${game.homeTeam.triCode} ${game.homeTeam.score}.`;
+  }
+
   node.querySelector(".game-footnote").textContent = footnote;
 
   return node;
