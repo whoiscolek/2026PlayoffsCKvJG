@@ -61,7 +61,6 @@ init().catch(error => {
 });
 
 async function init() {
-  // Wire all buttons first so a Firebase/API failure does not leave the page dead.
   wireTabs();
   wireAdmin();
   wireAuth();
@@ -184,6 +183,7 @@ function wireAuth() {
 async function ensureAccessDoc() {
   const ref = doc(db, "settings", "access");
   const snap = await getDoc(ref);
+
   if (snap.exists()) {
     state.access = snap.data();
     return;
@@ -196,13 +196,16 @@ async function ensureAccessDoc() {
     initializedAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   };
+
   await setDoc(ref, defaults);
   state.access = defaults;
 }
 
 async function refreshAccessDoc() {
   const snap = await getDoc(doc(db, "settings", "access"));
-  if (snap.exists()) state.access = snap.data();
+  if (snap.exists()) {
+    state.access = snap.data();
+  }
 }
 
 async function requireLogin(role) {
@@ -210,6 +213,7 @@ async function requireLogin(role) {
 
   const label = roleLabel(role);
   const password = window.prompt(`Enter ${label} password:`);
+
   if (!password) return false;
 
   try {
@@ -228,8 +232,10 @@ async function requireLogin(role) {
 
   state.auth[role] = true;
   localStorage.setItem(`jcnb_role_${role}`, "true");
+
   renderAuth();
   render();
+
   return true;
 }
 
@@ -237,24 +243,34 @@ async function changePassword() {
   const role = els.passwordRole.value;
   const currentPassword = els.currentPassword.value;
   const newPassword = els.newPassword.value;
-  if (!newPassword || newPassword.length < 4) return alert("New password must be at least 4 characters.");
+
+  if (!newPassword || newPassword.length < 4) {
+    return alert("New password must be at least 4 characters.");
+  }
 
   const loggedIn = await requireLogin(role);
   if (!loggedIn) return;
 
   await refreshAccessDoc();
+
   const currentHash = await hashPassword(role, currentPassword);
   const expected = state.access?.[`${role}Hash`];
-  if (currentHash !== expected) return alert("Current password is incorrect.");
+
+  if (currentHash !== expected) {
+    return alert("Current password is incorrect.");
+  }
 
   const updates = {
     [`${role}Hash`]: await hashPassword(role, newPassword),
     updatedAt: serverTimestamp()
   };
+
   await setDoc(doc(db, "settings", "access"), updates, { merge: true });
   await refreshAccessDoc();
+
   els.currentPassword.value = "";
   els.newPassword.value = "";
+
   alert(`${roleLabel(role)} password changed.`);
 }
 
@@ -263,13 +279,18 @@ function logoutAll() {
     state.auth[role] = false;
     localStorage.removeItem(`jcnb_role_${role}`);
   });
+
   renderAuth();
   render();
 }
 
 function renderAuth() {
   const active = ["cole", "jamie", "admin"].filter(role => state.auth[role]).map(roleLabel);
-  els.authStatus.textContent = active.length ? `Signed in as: ${active.join(", ")}` : "No one is signed in. Picks require the matching password.";
+
+  els.authStatus.textContent = active.length
+    ? `Signed in as: ${active.join(", ")}`
+    : "No one is signed in. Picks require the matching password.";
+
   els.adminOnlyControls.forEach(item => {
     item.classList.toggle("locked-control", !state.auth.admin);
   });
@@ -278,7 +299,10 @@ function renderAuth() {
 async function hashPassword(role, password) {
   const data = new TextEncoder().encode(`jamie-cole-nba-bets::${role}::${password}`);
   const digest = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, "0")).join("");
+
+  return Array.from(new Uint8Array(digest))
+    .map(byte => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function roleLabel(role) {
@@ -321,11 +345,16 @@ function subscribeToRoundOverrides() {
 async function refreshAll() {
   els.refreshBtn.disabled = true;
   els.refreshBtn.textContent = "Refreshing...";
+
   try {
     const data = await loadTodayGames();
     state.games = data.games || [];
     applyRoundOverrides();
-    els.lastUpdated.textContent = `Updated ${new Date(data.generatedAt).toLocaleTimeString("en-US", { timeZone: "America/Chicago" })} CT · ${data.source}`;
+
+    els.lastUpdated.textContent = `Updated ${new Date(data.generatedAt).toLocaleTimeString("en-US", {
+      timeZone: "America/Chicago"
+    })} CT · ${data.source}`;
+
     await autoGradeFinalGames();
     render();
   } catch (error) {
@@ -347,17 +376,22 @@ function applyRoundOverrides() {
 
 async function autoGradeFinalGames() {
   for (const game of state.games) {
-    if (game.isFinal) await maybeGradeAndSave(game);
+    if (game.isFinal) {
+      await maybeGradeAndSave(game);
+    }
   }
 }
 
 async function maybeGradeAndSave(game) {
   const pickDoc = state.picks.get(game.gameId);
   if (!pickDoc) return;
+
   const existing = await getDoc(doc(db, "ledger", game.gameId));
   if (existing.exists()) return;
+
   const result = gradeGame(game, pickDoc);
   if (!result) return;
+
   await setDoc(doc(db, "ledger", game.gameId), {
     ...result,
     matchup: `${game.awayTeam.triCode} at ${game.homeTeam.triCode}`,
@@ -374,8 +408,10 @@ function render() {
 
 function renderBalances() {
   const balances = calculateBalances(state.ledger);
+
   els.coleBalance.textContent = formatMoney(balances.cole);
   els.jamieBalance.textContent = formatMoney(balances.jamie);
+
   els.coleBalance.className = balances.cole >= 0 ? "positive" : "negative";
   els.jamieBalance.className = balances.jamie >= 0 ? "positive" : "negative";
 }
@@ -387,6 +423,7 @@ function renderGames() {
   }
 
   els.gamesList.innerHTML = "";
+
   for (const game of state.games) {
     els.gamesList.appendChild(renderGameCard(game));
   }
@@ -400,34 +437,14 @@ function renderGameCard(game) {
   const locked = isLocked(game);
   const ledgerEvent = state.ledger.find(event => event.gameId === game.gameId);
 
-function getScoreText(game) {
-  const awayScore = Number(game.awayTeam?.score || 0);
-  const homeScore = Number(game.homeTeam?.score || 0);
-
-  if (game.status === 1 && awayScore === 0 && homeScore === 0) {
-    return "Pregame";
-  }
-
-  if (game.status === 2) {
-    const periodText = game.period ? `Q${game.period}` : "Live";
-    const clockText = game.clock ? ` · ${game.clock}` : "";
-    return `${game.awayTeam.triCode} ${awayScore}, ${game.homeTeam.triCode} ${homeScore} · ${periodText}${clockText}`;
-  }
-
-  if (game.status === 3 || game.isFinal) {
-    return `Final: ${game.awayTeam.triCode} ${awayScore}, ${game.homeTeam.triCode} ${homeScore}`;
-  }
-
-  return `${game.awayTeam.triCode} ${awayScore}, ${game.homeTeam.triCode} ${homeScore}`;
-}  
-  
-  
   card.dataset.gameId = game.gameId;
 
   node.querySelector(".round-pill").textContent = game.round.label;
   node.querySelector(".matchup-title").textContent = `${game.awayTeam.fullName} at ${game.homeTeam.fullName}`;
+
   const scoreText = getScoreText(game);
   node.querySelector(".game-meta").textContent = `${formatGameTime(game.gameTimeUTC)} CT · ${game.statusText} · ${game.seriesText} · ${scoreText}`;
+
   node.querySelector(".value-badge").textContent = `$${game.round.value}`;
 
   node.querySelector(".away-code").textContent = game.awayTeam.triCode;
@@ -440,11 +457,10 @@ function getScoreText(game) {
 
   node.querySelector(".cole-pick").textContent = getPickTeamLabel(game, pickDoc?.picks?.cole);
   node.querySelector(".jamie-pick").textContent = getPickTeamLabel(game, pickDoc?.picks?.jamie);
+
   node.querySelector(".bet-status").textContent = ledgerEvent
     ? `${ledgerEvent.summary} · ${ledgerEvent.finalScore}`
     : betState.label;
-
-  const picker = node.querySelector(".picker-person");
 
   node.querySelectorAll(".team-pick").forEach(button => {
     const team = button.dataset.side === "home" ? game.homeTeam : game.awayTeam;
@@ -461,7 +477,12 @@ function getScoreText(game) {
 
     button.disabled = locked;
     button.title = locked ? "Picks are locked after tipoff." : `Pick ${team.fullName}`;
-    button.addEventListener("click", () => savePick(game, picker.value, team.id));
+
+    button.addEventListener("click", () => {
+      const person = getActivePickerRole();
+      if (!person) return;
+      savePick(game, person, team.id);
+    });
   });
 
   const clear = node.querySelector(".clear-picks");
@@ -490,6 +511,27 @@ function getScoreText(game) {
   return node;
 }
 
+function getScoreText(game) {
+  const awayScore = Number(game.awayTeam?.score || 0);
+  const homeScore = Number(game.homeTeam?.score || 0);
+
+  if (game.status === 1 && awayScore === 0 && homeScore === 0) {
+    return "Pregame";
+  }
+
+  if (game.status === 2) {
+    const periodText = game.period ? `Q${game.period}` : "Live";
+    const clockText = game.clock ? ` · ${game.clock}` : "";
+    return `${game.awayTeam.triCode} ${awayScore}, ${game.homeTeam.triCode} ${homeScore} · ${periodText}${clockText}`;
+  }
+
+  if (game.status === 3 || game.isFinal) {
+    return `Final: ${game.awayTeam.triCode} ${awayScore}, ${game.homeTeam.triCode} ${homeScore}`;
+  }
+
+  return `${game.awayTeam.triCode} ${awayScore}, ${game.homeTeam.triCode} ${homeScore}`;
+}
+
 function getActivePickerRole() {
   const activePickers = ["cole", "jamie"].filter(role => state.auth[role]);
 
@@ -507,17 +549,25 @@ function getActivePickerRole() {
 }
 
 async function savePick(game, person, teamId) {
-  if (isLocked(game)) return alert("Picks are locked at scheduled tipoff.");
+  if (isLocked(game)) {
+    return alert("Picks are locked at scheduled tipoff.");
+  }
+
   const ok = await requireLogin(person);
   if (!ok) return;
+
   const previous = state.picks.get(game.gameId) || {};
   const picks = { ...(previous.picks || {}), [person]: teamId };
+
   await setDoc(doc(db, "picks", game.gameId), {
     gameId: game.gameId,
     matchup: `${game.awayTeam.fullName} at ${game.homeTeam.fullName}`,
     gameTimeUTC: game.gameTimeUTC,
     round: game.round,
-    teams: { home: game.homeTeam, away: game.awayTeam },
+    teams: {
+      home: game.homeTeam,
+      away: game.awayTeam
+    },
     picks,
     updatedAt: serverTimestamp()
   }, { merge: true });
@@ -526,6 +576,7 @@ async function savePick(game, person, teamId) {
 async function clearPicks(gameId) {
   const ok = await requireLogin("admin");
   if (!ok) return;
+
   await deleteDoc(doc(db, "picks", gameId));
 }
 
@@ -561,7 +612,10 @@ async function overridePicks() {
     matchup: `${game.awayTeam.fullName} at ${game.homeTeam.fullName}`,
     gameTimeUTC: game.gameTimeUTC,
     round: game.round,
-    teams: { home: game.homeTeam, away: game.awayTeam },
+    teams: {
+      home: game.homeTeam,
+      away: game.awayTeam
+    },
     picks: {
       cole: coleTeamId,
       jamie: jamieTeamId
