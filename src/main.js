@@ -400,11 +400,34 @@ function renderGameCard(game) {
   const locked = isLocked(game);
   const ledgerEvent = state.ledger.find(event => event.gameId === game.gameId);
 
+function getScoreText(game) {
+  const awayScore = Number(game.awayTeam?.score || 0);
+  const homeScore = Number(game.homeTeam?.score || 0);
+
+  if (game.status === 1 && awayScore === 0 && homeScore === 0) {
+    return "Pregame";
+  }
+
+  if (game.status === 2) {
+    const periodText = game.period ? `Q${game.period}` : "Live";
+    const clockText = game.clock ? ` · ${game.clock}` : "";
+    return `${game.awayTeam.triCode} ${awayScore}, ${game.homeTeam.triCode} ${homeScore} · ${periodText}${clockText}`;
+  }
+
+  if (game.status === 3 || game.isFinal) {
+    return `Final: ${game.awayTeam.triCode} ${awayScore}, ${game.homeTeam.triCode} ${homeScore}`;
+  }
+
+  return `${game.awayTeam.triCode} ${awayScore}, ${game.homeTeam.triCode} ${homeScore}`;
+}  
+  
+  
   card.dataset.gameId = game.gameId;
 
   node.querySelector(".round-pill").textContent = game.round.label;
   node.querySelector(".matchup-title").textContent = `${game.awayTeam.fullName} at ${game.homeTeam.fullName}`;
-  node.querySelector(".game-meta").textContent = `${formatGameTime(game.gameTimeUTC)} CT · ${game.statusText} · ${game.seriesText}`;
+  const scoreText = getScoreText(game);
+  node.querySelector(".game-meta").textContent = `${formatGameTime(game.gameTimeUTC)} CT · ${game.statusText} · ${game.seriesText} · ${scoreText}`;
   node.querySelector(".value-badge").textContent = `$${game.round.value}`;
 
   node.querySelector(".away-code").textContent = game.awayTeam.triCode;
