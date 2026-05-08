@@ -351,6 +351,8 @@ async function refreshAll() {
     state.games = data.games || [];
     applyRoundOverrides();
 
+    await archiveLoadedGames(state.games);
+
     els.lastUpdated.textContent = `Updated ${new Date(data.generatedAt).toLocaleTimeString("en-US", {
       timeZone: "America/Chicago"
     })} CT · ${data.source}`;
@@ -364,6 +366,21 @@ async function refreshAll() {
   } finally {
     els.refreshBtn.disabled = false;
     els.refreshBtn.textContent = "Refresh";
+  }
+}
+
+async function archiveLoadedGames(games) {
+  for (const game of games || []) {
+    if (!game?.gameId) continue;
+
+    try {
+      await setDoc(doc(db, "gameArchive", game.gameId), {
+        ...game,
+        archivedAt: serverTimestamp()
+      }, { merge: true });
+    } catch (error) {
+      console.error(`Could not archive game ${game.gameId}:`, error);
+    }
   }
 }
 
