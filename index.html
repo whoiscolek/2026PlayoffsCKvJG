@@ -116,6 +116,25 @@
           </div>
 
           <div class="admin-card admin-only-control">
+            <h3>Retroactive ledger add</h3>
+            <p>Use this when a game is missing from the ledger. Enter the NBA Game ID and the app will retrieve the final score automatically.</p>
+          
+            <label>Game ID</label>
+            <input id="retro-ledger-game-id" placeholder="Example: 0042500211" />
+          
+            <label>Bet winner</label>
+            <select id="retro-ledger-winner">
+              <option value="cole">Cole</option>
+              <option value="jamie">Jamie</option>
+            </select>
+          
+            <label>Bet value</label>
+            <input id="retro-ledger-value" type="number" min="1" step="1" placeholder="Example: 2" />
+          
+            <button id="retro-ledger-btn" class="primary-btn">Add from NBA boxscore</button>
+          </div>
+
+          <div class="admin-card admin-only-control">
             <h3>Ledger correction</h3>
             <p>Use this when a game already appears in the ledger. This keeps the matchup and final score, but changes who won the bet and for how much.</p>
 
