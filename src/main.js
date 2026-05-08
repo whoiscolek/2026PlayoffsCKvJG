@@ -39,6 +39,10 @@ const els = {
   overrideColeSide: document.querySelector("#override-cole-side"),
   overrideJamieSide: document.querySelector("#override-jamie-side"),
   overridePicksBtn: document.querySelector("#override-picks-btn"),
+  retroLedgerGameId: document.querySelector("#retro-ledger-game-id"),
+  retroLedgerWinner: document.querySelector("#retro-ledger-winner"),
+  retroLedgerValue: document.querySelector("#retro-ledger-value"),
+  retroLedgerBtn: document.querySelector("#retro-ledger-btn"),
   ledgerCorrectionGameId: document.querySelector("#ledger-correction-game-id"),
   ledgerCorrectionWinner: document.querySelector("#ledger-correction-winner"),
   ledgerCorrectionValue: document.querySelector("#ledger-correction-value"),
@@ -129,6 +133,11 @@ function wireAdmin() {
     });
   }
 
+
+  if (els.retroLedgerBtn) {
+    els.retroLedgerBtn.addEventListener("click", addRetroactiveLedgerEntry);
+  }
+  
   if (els.roundSaveBtn) {
     els.roundSaveBtn.addEventListener("click", async () => {
       const ok = await requireLogin("admin");
@@ -781,6 +790,119 @@ async function overridePicks() {
 
   alert(`Pick override saved: Cole — ${coleTeam.fullName}; Jamie — ${jamieTeam.fullName}. If the game is final, use Manual game settlement or refresh after the final score is available so the ledger recalculates.`);
 }
+
+async function fetchArchivedBoxscoreByGameId(gameId) {
+  const url = `https://cdn.nba.com/static/json/liveData/boxscore/boxscore_${gameId}.json`;
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`Could not retrieve NBA boxscore for Game ID ${gameId}.`);
+  }
+
+  const data = await response.json();
+  const game = data?.game;
+
+  if (!game) {
+    throw new Error(`NBA boxscore did not return game data for ${gameId}.`);
+  }
+
+  const homeTeam = {
+    id: String(game.homeTeam.teamId),
+    city: game.homeTeam.teamCity,
+    name: game.homeTeam.teamName,
+    fullName: `${game.homeTeam.teamCity} ${game.homeTeam.teamName}`,
+    triCode: game.homeTeam.teamTricode,
+    score: Number(game.homeTeam.score || 0)
+  };
+
+  const awayTeam = {
+    id: String(game.awayTeam.teamId),
+    city: game.awayTeam.teamCity,
+    name: game.awayTeam.teamName,
+    fullName: `${game.awayTeam.teamCity} ${game.awayTeam.teamName}`,
+    triCode: game.awayTeam.teamTricode,
+    score: Number(game.awayTeam.score || 0)
+  };
+
+  const isFinal = Number(game.gameStatus) === 3 || /final/i.test(game.gameStatusText || "");
+
+  const winnerTeamId = isFinal
+    ? homeTeam.score > awayTeam.score
+      ? homeTeam.id
+      : awayTeam.score > homeTeam.score
+        ? awayTeam.id
+        : null
+    : null;
+
+  return {
+    gameId: String(game.gameId || gameId),
+    matchup: `${awayTeam.triCode} at ${homeTeam.triCode}`,
+    fullMatchup: `${awayTeam.fullName} at ${homeTeam.fullName}`,
+    finalScore: `${awayTeam.triCode} ${awayTeam.score}, ${homeTeam.triCode} ${homeTeam.score}`,
+    homeTeam,
+    awayTeam,
+    isFinal,
+    winnerTeamId,
+    gameTimeUTC: game.gameTimeUTC || null
+  };
+}
+
+async function addRetroactiveLedgerEntry() {
+  const ok = await requireLogin("admin");
+  if (!ok) return;
+
+  const gameId = els.retroLedgerGameId.value.trim();
+  const winner = els.retroLedgerWinner.value;
+  const value = Number(els.retroLedgerValue.value);
+
+  if (!gameId || !winner || !Number.isFinite(value) || value <= 0) {
+    return alert("Need Game ID, bet winner, and a valid bet value.");
+  }
+
+  const existingSnap = await getDoc(doc(db, "ledger", gameId));
+
+  if (existingSnap.exists()) {
+    return alert("This game already exists in the ledger. Use Ledger correction instead.");
+  }
+
+  let boxscore;
+
+  try {
+    boxscore = await fetchArchivedBoxscoreByGameId(gameId);
+  } catch (error) {
+    console.error(error);
+    return alert(error.message);
+  }
+
+  const loser = winner === "cole" ? "jamie" : "cole";
+
+  await setDoc(doc(db, "ledger", gameId), {
+    gameId,
+    matchup: boxscore.matchup,
+    fullMatchup: boxscore.fullMatchup,
+    finalScore: boxscore.finalScore,
+    value,
+    winner,
+    loser,
+    deltas: {
+      cole: winner === "cole" ? value : -value,
+      jamie: winner === "jamie" ? value : -value
+    },
+    summary: `${roleLabel(winner)} won $${value}`,
+    retroactiveLedgerAdd: true,
+    gameWinnerTeamId: boxscore.winnerTeamId,
+    teams: {
+      home: boxscore.homeTeam,
+      away: boxscore.awayTeam
+    },
+    createdAt: serverTimestamp(),
+    correctedAt: serverTimestamp()
+  }, { merge: true });
+
+  alert(`Retroactive ledger entry added: ${boxscore.finalScore}. ${roleLabel(winner)} won $${value}.`);
+}
+
+
 
 async function correctLedgerEntry() {
   const ok = await requireLogin("admin");
