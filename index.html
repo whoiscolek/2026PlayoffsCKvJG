@@ -72,82 +72,82 @@
               <p>Trust-based tools for correcting picks, scores, rounds, and settled bets.</p>
             </div>
           </div>
-        
+
           <div class="admin-card">
             <h3>Password settings</h3>
             <p>Login as Cole/Jamie/Admin first, then change that role’s password here.</p>
-        
+
             <label>Role</label>
             <select id="password-role">
               <option value="cole">Cole</option>
               <option value="jamie">Jamie</option>
               <option value="admin">Admin</option>
             </select>
-        
+
             <label>Current password</label>
             <input id="current-password" type="password" autocomplete="current-password" placeholder="Current password" />
-        
+
             <label>New password</label>
             <input id="new-password" type="password" autocomplete="new-password" placeholder="New password" />
-        
+
             <button id="change-password-btn" class="primary-btn">Change password</button>
           </div>
-        
+
           <div class="admin-card admin-only-control">
             <h3>Pick override</h3>
-            <p>Use this if Cole/Jamie forgot to lock picks in or a pick needs to be corrected. This works for today’s games and any games saved in the archive.</p>
-        
+            <p>Use this if Cole/Jamie forgot to lock picks in or a pick needs to be corrected. This works for today’s visible games and games saved in the archive.</p>
+
             <label>Game ID</label>
             <input id="override-game-id" placeholder="Example: 0042500211" />
-        
+
             <label>Cole Team ID</label>
             <input id="override-cole-team-id" placeholder="Example: 1610612752" />
-        
+
             <label>Jamie Team ID</label>
             <input id="override-jamie-team-id" placeholder="Example: 1610612755" />
-        
+
             <button id="override-picks-btn" class="primary-btn">Override picks</button>
           </div>
-        
+
           <div class="admin-card admin-only-control">
             <h3>Ledger correction</h3>
-            <p>Use this after a game has disappeared from today’s dashboard but already appears in the ledger. This keeps the matchup and final score, but changes who won the bet.</p>
-        
+            <p>Use this when a game already appears in the ledger. This keeps the matchup and final score, but changes who won the bet and for how much.</p>
+
             <label>Game ID</label>
             <input id="ledger-correction-game-id" placeholder="Example: 0042500211" />
-        
+
             <label>Bet winner</label>
             <select id="ledger-correction-winner">
               <option value="cole">Cole</option>
               <option value="jamie">Jamie</option>
             </select>
-        
+
             <label>Bet value</label>
             <input id="ledger-correction-value" type="number" min="1" step="1" placeholder="Example: 2" />
-        
+
             <button id="ledger-correction-btn" class="primary-btn">Correct ledger</button>
           </div>
-        
+
           <div class="admin-card admin-only-control">
             <h3>Manual game settlement</h3>
-            <p>Use only if the automatic NBA final-score grading fails.</p>
-        
+            <p>Use if automatic NBA final-score grading fails. This now works for visible games and archived games.</p>
+
             <label>Game ID</label>
             <input id="manual-game-id" placeholder="Example: 0042500201" />
-        
+
             <label>Winner Team ID</label>
             <input id="manual-winner-id" placeholder="Paste team id from game card" />
-        
+
             <button id="manual-grade-btn" class="primary-btn">Settle manually</button>
           </div>
-        
+
           <div class="admin-card admin-only-control">
             <h3>Round override</h3>
             <p>The app estimates the round by date. Override a specific game here if needed.</p>
-        
+
             <label>Game ID</label>
             <input id="round-game-id" placeholder="Example: 0042500201" />
-        
+
             <label>Round</label>
             <select id="round-key">
               <option value="first_round">First Round — $1</option>
@@ -156,70 +156,11 @@
               <option value="finals">NBA Finals — $4</option>
               <option value="finals_game_7">NBA Finals Game 7 — $10</option>
             </select>
-        
+
             <button id="round-save-btn" class="primary-btn">Save round override</button>
           </div>
         </section>
 
-          <div class="admin-card">
-            <h3>Password settings</h3>
-            <p>Login as Cole/Jamie/Admin first, then change that role’s password here.</p>
-            <label>Role</label>
-            <select id="password-role">
-              <option value="cole">Cole</option>
-              <option value="jamie">Jamie</option>
-              <option value="admin">Admin</option>
-            </select>
-            <label>Current password</label>
-            <input id="current-password" type="password" autocomplete="current-password" placeholder="Current password" />
-            <label>New password</label>
-            <input id="new-password" type="password" autocomplete="new-password" placeholder="New password" />
-            <button id="change-password-btn" class="primary-btn">Change password</button>
-          </div>
-
-          <div class="admin-card admin-only-control">
-            <h3>Manual game settlement</h3>
-            <p>Use only if the automatic NBA final-score grading fails.</p>
-            <label>Game ID</label>
-            <input id="manual-game-id" placeholder="Example: 0042500201" />
-            <label>Winner Team ID</label>
-            <input id="manual-winner-id" placeholder="Paste team id from game card" />
-            <button id="manual-grade-btn" class="primary-btn">Settle manually</button>
-          </div>
-
-          <div class="admin-card admin-only-control">
-            <h3>Round override</h3>
-            <p>The app estimates the round by date. Override a specific game here if needed.</p>
-            <label>Game ID</label>
-            <input id="round-game-id" placeholder="Example: 0042500201" />
-            <label>Round</label>
-            <select id="round-key">
-              <option value="first_round">First Round — $1</option>
-              <option value="conference_semifinals">Conference Semifinals — $2</option>
-              <option value="conference_finals">Conference Finals — $3</option>
-              <option value="finals">NBA Finals — $4</option>
-              <option value="finals_game_7">NBA Finals Game 7 — $10</option>
-            </select>
-            <button id="round-save-btn" class="primary-btn">Save round override</button>
-          </div>
-          
-          <div class="admin-card admin-only-control">
-            <h3>Pick override</h3>
-            <p>Use this if Cole/Jamie forgot to lock picks in or a pick needs to be corrected. Use the Game ID and Team IDs shown on each game card.</p>
-          
-            <label>Game ID</label>
-            <input id="override-game-id" placeholder="Example: 0042500211" />
-          
-            <label>Cole Team ID</label>
-            <input id="override-cole-team-id" placeholder="Example: 1610612752" />
-          
-            <label>Jamie Team ID</label>
-            <input id="override-jamie-team-id" placeholder="Example: 1610612755" />
-          
-            <button id="override-picks-btn" class="primary-btn">Override picks</button>
-          </div>
-          
-        </section>
       </main>
     </div>
 
