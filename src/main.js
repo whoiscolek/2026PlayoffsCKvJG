@@ -672,7 +672,8 @@ async function savePick(game, person, teamId) {
   const previous = state.picks.get(game.gameId) || {};
   const picks = { ...(previous.picks || {}), [person]: teamId };
 
-  await setDoc(doc(db, "picks", game.gameId), {
+  const optimisticPickDoc = {
+    ...previous,
     gameId: game.gameId,
     matchup: `${game.awayTeam.fullName} at ${game.homeTeam.fullName}`,
     gameTimeUTC: game.gameTimeUTC,
@@ -681,9 +682,24 @@ async function savePick(game, person, teamId) {
       home: game.homeTeam,
       away: game.awayTeam
     },
-    picks,
-    updatedAt: serverTimestamp()
-  }, { merge: true });
+    picks
+  };
+
+  state.picks.set(game.gameId, optimisticPickDoc);
+  render();
+
+  try {
+    await setDoc(doc(db, "picks", game.gameId), {
+      ...optimisticPickDoc,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+
+    const teamLabel = getPickTeamLabel(game, teamId);
+    alert(`${roleLabel(person)} pick saved: ${teamLabel}`);
+  } catch (error) {
+    console.error("Pick save failed:", error);
+    alert("Pick did not save. Check connection and try again.");
+  }
 }
 
 async function clearPicks(gameId) {
@@ -691,6 +707,26 @@ async function clearPicks(gameId) {
   if (!ok) return;
 
   await deleteDoc(doc(db, "picks", gameId));
+}
+
+async function findGameForAdmin(gameId) {
+  const visibleGame = state.games.find(game => String(game.gameId) === String(gameId));
+
+  if (visibleGame) {
+    return visibleGame;
+  }
+
+  try {
+    const archivedSnap = await getDoc(doc(db, "gameArchive", gameId));
+
+    if (archivedSnap.exists()) {
+      return archivedSnap.data();
+    }
+  } catch (error) {
+    console.error("Could not search game archive:", error);
+  }
+
+  return null;
 }
 
 async function overridePicks() {
@@ -705,10 +741,10 @@ async function overridePicks() {
     return alert("Need Game ID, Cole Team ID, and Jamie Team ID.");
   }
 
-  const game = state.games.find(g => g.gameId === gameId);
+  const game = await findGameForAdmin(gameId);
 
   if (!game) {
-    return alert("That Game ID is not currently loaded on today's dashboard. Use a Game ID from one of the visible game cards.");
+    return alert("That Game ID was not found in today's games or the saved game archive. If this was an older game, use a manual ledger correction instead.");
   }
 
   const validTeamIds = [
@@ -717,7 +753,7 @@ async function overridePicks() {
   ];
 
   if (!validTeamIds.includes(String(coleTeamId)) || !validTeamIds.includes(String(jamieTeamId))) {
-    return alert("Cole/Jamie Team IDs must match the home or away Team IDs shown on that game card.");
+    return alert("Cole/Jamie Team IDs must match the home or away Team IDs for that game.");
   }
 
   await setDoc(doc(db, "picks", gameId), {
@@ -739,7 +775,7 @@ async function overridePicks() {
 
   await deleteDoc(doc(db, "ledger", gameId));
 
-  alert("Pick override saved. If the game is final, refresh or manually settle again so the ledger recalculates.");
+  alert("Pick override saved from admin. If the game is final, use manual settlement or refresh once the final score source is available so the ledger recalculates.");
 }
 
 function renderLedger() {
