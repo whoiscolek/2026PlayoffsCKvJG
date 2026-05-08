@@ -792,11 +792,11 @@ async function overridePicks() {
 }
 
 async function fetchArchivedBoxscoreByGameId(gameId) {
-  const url = `https://cdn.nba.com/static/json/liveData/boxscore/boxscore_${gameId}.json`;
-  const response = await fetch(url);
+  const response = await fetch(`/api/boxscore?gameId=${encodeURIComponent(gameId)}`);
 
   if (!response.ok) {
-    throw new Error(`Could not retrieve NBA boxscore for Game ID ${gameId}.`);
+    const errorText = await response.text();
+    throw new Error(`Could not retrieve NBA boxscore for Game ID ${gameId}. ${errorText}`);
   }
 
   const data = await response.json();
