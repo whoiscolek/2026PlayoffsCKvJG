@@ -36,8 +36,8 @@ const els = {
   manualGradeBtn: document.querySelector("#manual-grade-btn"),
   roundGameId: document.querySelector("#round-game-id"),
   overrideGameId: document.querySelector("#override-game-id"),
-  overrideColeTeamId: document.querySelector("#override-cole-team-id"),
-  overrideJamieTeamId: document.querySelector("#override-jamie-team-id"),
+  overrideColeSide: document.querySelector("#override-cole-side"),
+  overrideJamieSide: document.querySelector("#override-jamie-side"),
   overridePicksBtn: document.querySelector("#override-picks-btn"),
   ledgerCorrectionGameId: document.querySelector("#ledger-correction-game-id"),
   ledgerCorrectionWinner: document.querySelector("#ledger-correction-winner"),
@@ -744,27 +744,21 @@ async function overridePicks() {
   if (!ok) return;
 
   const gameId = els.overrideGameId.value.trim();
-  const coleTeamId = els.overrideColeTeamId.value.trim();
-  const jamieTeamId = els.overrideJamieTeamId.value.trim();
+  const coleSide = els.overrideColeSide.value;
+  const jamieSide = els.overrideJamieSide.value;
 
-  if (!gameId || !coleTeamId || !jamieTeamId) {
-    return alert("Need Game ID, Cole Team ID, and Jamie Team ID.");
+  if (!gameId || !coleSide || !jamieSide) {
+    return alert("Need Game ID, Cole pick, and Jamie pick.");
   }
 
   const game = await findGameForAdmin(gameId);
 
   if (!game) {
-    return alert("That Game ID was not found in today's games or the saved game archive. If this was an older game, use a manual ledger correction instead.");
+    return alert("That Game ID was not found in today's games or the saved game archive. If this game is already in the ledger, use Ledger correction instead.");
   }
 
-  const validTeamIds = [
-    String(game.homeTeam.id),
-    String(game.awayTeam.id)
-  ];
-
-  if (!validTeamIds.includes(String(coleTeamId)) || !validTeamIds.includes(String(jamieTeamId))) {
-    return alert("Cole/Jamie Team IDs must match the home or away Team IDs for that game.");
-  }
+  const coleTeam = coleSide === "home" ? game.homeTeam : game.awayTeam;
+  const jamieTeam = jamieSide === "home" ? game.homeTeam : game.awayTeam;
 
   await setDoc(doc(db, "picks", gameId), {
     gameId,
@@ -776,8 +770,8 @@ async function overridePicks() {
       away: game.awayTeam
     },
     picks: {
-      cole: coleTeamId,
-      jamie: jamieTeamId
+      cole: String(coleTeam.id),
+      jamie: String(jamieTeam.id)
     },
     adminOverride: true,
     updatedAt: serverTimestamp()
@@ -785,7 +779,7 @@ async function overridePicks() {
 
   await deleteDoc(doc(db, "ledger", gameId));
 
-  alert("Pick override saved from admin. If the game is final, use manual settlement or refresh once the final score source is available so the ledger recalculates.");
+  alert(`Pick override saved: Cole — ${coleTeam.fullName}; Jamie — ${jamieTeam.fullName}. If the game is final, use Manual game settlement or refresh after the final score is available so the ledger recalculates.`);
 }
 
 async function correctLedgerEntry() {
