@@ -39,6 +39,10 @@ const els = {
   overrideColeTeamId: document.querySelector("#override-cole-team-id"),
   overrideJamieTeamId: document.querySelector("#override-jamie-team-id"),
   overridePicksBtn: document.querySelector("#override-picks-btn"),
+  ledgerCorrectionGameId: document.querySelector("#ledger-correction-game-id"),
+  ledgerCorrectionWinner: document.querySelector("#ledger-correction-winner"),
+  ledgerCorrectionValue: document.querySelector("#ledger-correction-value"),
+  ledgerCorrectionBtn: document.querySelector("#ledger-correction-btn"),
   roundKey: document.querySelector("#round-key"),
   roundSaveBtn: document.querySelector("#round-save-btn"),
   authStatus: document.querySelector("#auth-status"),
@@ -113,15 +117,15 @@ function wireAdmin() {
 
       const gameId = els.manualGameId?.value.trim();
       const winnerTeamId = els.manualWinnerId?.value.trim();
-      const game = state.games.find(g => g.gameId === gameId);
+      const game = await findGameForAdmin(gameId);
 
       if (!game || !winnerTeamId) {
-        return alert("Need a valid game ID and winner team ID.");
+        return alert("Need a valid game ID and winner team ID. The game must be visible today or saved in the archive.");
       }
 
       const manualGame = { ...game, isFinal: true, winnerTeamId };
-      await maybeGradeAndSave(manualGame);
-      alert("Manual settlement attempted. Check ledger.");
+      await maybeGradeAndSave(manualGame, { force: true });
+      alert("Manual settlement saved. Check ledger.");
     });
   }
 
@@ -155,6 +159,10 @@ function wireAdmin() {
 
   if (els.overridePicksBtn) {
     els.overridePicksBtn.addEventListener("click", overridePicks);
+  }
+
+  if (els.ledgerCorrectionBtn) {
+    els.ledgerCorrectionBtn.addEventListener("click", correctLedgerEntry);
   }
 }
 
@@ -399,12 +407,12 @@ async function autoGradeFinalGames() {
   }
 }
 
-async function maybeGradeAndSave(game) {
+async function maybeGradeAndSave(game, options = {}) {
   const pickDoc = state.picks.get(game.gameId);
   if (!pickDoc) return;
 
   const existing = await getDoc(doc(db, "ledger", game.gameId));
-  if (existing.exists()) return;
+  if (existing.exists() && !options.force) return;
 
   const result = gradeGame(game, pickDoc);
   if (!result) return;
@@ -413,8 +421,10 @@ async function maybeGradeAndSave(game) {
     ...result,
     matchup: `${game.awayTeam.triCode} at ${game.homeTeam.triCode}`,
     finalScore: `${game.awayTeam.triCode} ${game.awayTeam.score}, ${game.homeTeam.triCode} ${game.homeTeam.score}`,
-    createdAt: serverTimestamp()
-  });
+    createdAt: existing.exists() ? existing.data().createdAt : serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    correctedByAdmin: Boolean(options.force)
+  }, { merge: true });
 }
 
 function render() {
@@ -776,6 +786,46 @@ async function overridePicks() {
   await deleteDoc(doc(db, "ledger", gameId));
 
   alert("Pick override saved from admin. If the game is final, use manual settlement or refresh once the final score source is available so the ledger recalculates.");
+}
+
+async function correctLedgerEntry() {
+  const ok = await requireLogin("admin");
+  if (!ok) return;
+
+  const gameId = els.ledgerCorrectionGameId?.value.trim();
+  const winner = els.ledgerCorrectionWinner?.value;
+  const value = Number(els.ledgerCorrectionValue?.value);
+
+  if (!gameId || !winner || !Number.isFinite(value) || value <= 0) {
+    return alert("Need Game ID, bet winner, and a valid bet value.");
+  }
+
+  const existingSnap = await getDoc(doc(db, "ledger", gameId));
+
+  if (!existingSnap.exists()) {
+    return alert("That Game ID is not in the ledger yet. Use Pick override + Manual game settlement first if the game needs to be created in the ledger.");
+  }
+
+  const existing = existingSnap.data();
+  const loser = winner === "cole" ? "jamie" : "cole";
+
+  await setDoc(doc(db, "ledger", gameId), {
+    ...existing,
+    gameId,
+    value,
+    winner,
+    loser,
+    deltas: {
+      cole: winner === "cole" ? value : -value,
+      jamie: winner === "jamie" ? value : -value
+    },
+    summary: `${roleLabel(winner)} won $${value}`,
+    correctedByAdmin: true,
+    correctedAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  }, { merge: true });
+
+  alert(`Ledger corrected: ${roleLabel(winner)} won $${value}.`);
 }
 
 function renderLedger() {
