@@ -95,17 +95,23 @@
 
           <div class="admin-card admin-only-control">
             <h3>Pick override</h3>
-            <p>Use this if Cole/Jamie forgot to lock picks in or a pick needs to be corrected. This works for today’s visible games and games saved in the archive.</p>
-
+            <p>Use this if Cole/Jamie forgot to lock picks in or a pick needs to be corrected. Enter the Game ID, then choose home/away for each person.</p>
+          
             <label>Game ID</label>
             <input id="override-game-id" placeholder="Example: 0042500211" />
-
-            <label>Cole Team ID</label>
-            <input id="override-cole-team-id" placeholder="Example: 1610612752" />
-
-            <label>Jamie Team ID</label>
-            <input id="override-jamie-team-id" placeholder="Example: 1610612755" />
-
+          
+            <label>Cole pick</label>
+            <select id="override-cole-side">
+              <option value="away">Away team</option>
+              <option value="home">Home team</option>
+            </select>
+          
+            <label>Jamie pick</label>
+            <select id="override-jamie-side">
+              <option value="away">Away team</option>
+              <option value="home">Home team</option>
+            </select>
+          
             <button id="override-picks-btn" class="primary-btn">Override picks</button>
           </div>
 
